@@ -26,16 +26,3 @@ type ReActResponse struct {
 	Answer   string    `json:"answer,omitempty"`
 	Done     bool      `json:"done"`
 }
-
-type Tool struct {
-	Name        string               `json:"name"`
-	Description string               `json:"description"`
-	Parameters  map[string]Parameter `json:"parameters"`
-	Execute     func(input map[string]interface{}) (string, error)
-}
-
-type Parameter struct {
-	Type        string `json:"type"`
-	Description string `json:"description"`
-	Required    bool   `json:"required"`
-}

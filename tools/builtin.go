@@ -206,10 +206,14 @@ type AgentToolRegistry interface {
 	Execute(name string, input map[string]interface{}) (string, error)
 }
 
-func RegisterBuiltinToolsTo(registry AgentToolRegistry) {
+func RegisterBuiltinToolsTo(registry AgentToolRegistry) error {
 	for _, tool := range BuiltinTools {
-		registry.RegisterTool(tool)
+		err := registry.RegisterTool(tool)
+		if err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
 func EvaluateSimpleMath(expr string) (float64, error) {
