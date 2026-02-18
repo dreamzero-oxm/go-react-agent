@@ -7,12 +7,13 @@ import (
 
 	"github.com/go-react-agent/llm"
 	"github.com/go-react-agent/logger"
+	"github.com/go-react-agent/tools"
 )
 
 type ToolRegistry interface {
-	RegisterTool(tool *Tool) error
+	RegisterTool(tool *tools.Tool) error
 	UnregisterTool(name string) error
-	Get(name string) (*Tool, error)
+	Get(name string) (*tools.Tool, error)
 	List() []string
 	Execute(name string, input map[string]interface{}) (string, error)
 	GetToolsSchema() string
@@ -39,7 +40,7 @@ func NewReActAgent(llm llm.LLM, config *Config, log logger.Logger) *ReActAgent {
 
 	return &ReActAgent{
 		llm:    llm,
-		tools:  &simpleToolRegistry{tools: make(map[string]*Tool)},
+		tools:  &simpleToolRegistry{tools: make(map[string]*tools.Tool)},
 		config: config,
 		logger: log,
 		parser: config.Parser,
@@ -65,10 +66,10 @@ func NewReActAgentWithRegistry(llm llm.LLM, config *Config, log logger.Logger, r
 }
 
 type simpleToolRegistry struct {
-	tools map[string]*Tool
+	tools map[string]*tools.Tool
 }
 
-func (s *simpleToolRegistry) RegisterTool(tool *Tool) error {
+func (s *simpleToolRegistry) RegisterTool(tool *tools.Tool) error {
 	if tool.Name == "" {
 		return fmt.Errorf("tool name cannot be empty")
 	}
@@ -90,7 +91,7 @@ func (s *simpleToolRegistry) UnregisterTool(name string) error {
 	return nil
 }
 
-func (s *simpleToolRegistry) Get(name string) (*Tool, error) {
+func (s *simpleToolRegistry) Get(name string) (*tools.Tool, error) {
 	tool, exists := s.tools[name]
 	if !exists {
 		return nil, fmt.Errorf("tool '%s' not found", name)
@@ -296,17 +297,17 @@ func (a *ReActAgent) injectToolsIntoPrompt(prompt string) string {
 }
 
 func (a *ReActAgent) RegisterTool(tool interface{}) error {
-	if toolPtr, ok := tool.(*Tool); ok {
+	if toolPtr, ok := tool.(*tools.Tool); ok {
 		return a.tools.RegisterTool(toolPtr)
 	}
-	return fmt.Errorf("tool must be *Tool type")
+	return fmt.Errorf("tool must be *tools.Tool type")
 }
 
 func (a *ReActAgent) UnregisterTool(name string) error {
 	return a.tools.UnregisterTool(name)
 }
 
-func (a *ReActAgent) Register(tool *Tool) error {
+func (a *ReActAgent) Register(tool *tools.Tool) error {
 	return a.tools.RegisterTool(tool)
 }
 

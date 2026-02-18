@@ -9,6 +9,7 @@ import (
 
 	"github.com/go-react-agent/llm"
 	"github.com/go-react-agent/logger"
+	"github.com/go-react-agent/tools"
 )
 
 type MockLLMForTest struct {
@@ -52,10 +53,10 @@ func TestReActAgentRegisterTool(t *testing.T) {
 	mockLLM := &MockLLMForTest{}
 	agent := NewReActAgent(mockLLM, DefaultConfig(), log)
 
-	testTool := &Tool{
+	testTool := &tools.Tool{
 		Name:        "test_tool",
 		Description: "Test tool",
-		Parameters: map[string]Parameter{
+		Parameters: map[string]tools.Parameter{
 			"input": {Type: "string", Description: "Test input", Required: true},
 		},
 		Execute: func(input map[string]interface{}) (string, error) {
@@ -179,7 +180,7 @@ func TestReActAgentRunWithTools(t *testing.T) {
 
 	agent := NewReActAgent(mockLLM, DefaultConfig(), log)
 
-	echoTool := &Tool{
+	echoTool := &tools.Tool{
 		Name:        "echo",
 		Description: "Echo text",
 		Execute: func(input map[string]interface{}) (string, error) {
@@ -223,7 +224,7 @@ func TestReActAgentRunWithCallback(t *testing.T) {
 
 	agent := NewReActAgent(mockLLM, DefaultConfig(), log)
 
-	echoTool := &Tool{
+	echoTool := &tools.Tool{
 		Name:        "echo",
 		Description: "Echo text",
 		Execute: func(input map[string]interface{}) (string, error) {
@@ -275,7 +276,7 @@ func TestReActAgentMaxIterations(t *testing.T) {
 
 	agent := NewReActAgent(mockLLM, config, log)
 
-	echoTool := &Tool{
+	echoTool := &tools.Tool{
 		Name:        "echo",
 		Description: "Echo text",
 		Execute: func(input map[string]interface{}) (string, error) {
@@ -353,16 +354,12 @@ func TestReActAgentSystemPromptWithToolPlaceholder(t *testing.T) {
 	customPrompt := "You are a helpful assistant.\n\nAvailable tools:\n{{tools}}"
 	agent.SetSystemPrompt(customPrompt)
 	
-	echoTool := &Tool{
-		Name:        "echo",
-		Description: "Echo text",
-		Execute: func(input map[string]interface{}) (string, error) {
-			text, _ := input["text"].(string)
-			return text, nil
-		},
+	err := tools.RegisterBuiltinToolsTo(agent)
+	if err != nil {
+		t.Error(err)
+		return
 	}
-	agent.RegisterTool(echoTool)
-
+	
 	gotPrompt := agent.GetSystemPrompt()
 	if !strings.Contains(gotPrompt, "Available tools:") {
 		t.Errorf("Expected prompt to contain 'Available tools:', got '%s'", gotPrompt)
@@ -383,15 +380,11 @@ func TestReActAgentSystemPromptWithCustomPlaceholder(t *testing.T) {
 
 	agent := NewReActAgent(mockLLM, DefaultConfig(), log)
 
-	echoTool := &Tool{
-		Name:        "echo",
-		Description: "Echo text",
-		Execute: func(input map[string]interface{}) (string, error) {
-			text, _ := input["text"].(string)
-			return text, nil
-		},
+	err := tools.RegisterBuiltinToolsTo(agent)
+	if err != nil {
+		t.Error(err)
+		return
 	}
-	agent.RegisterTool(echoTool)
 
 	customPrompt := "You are a helpful assistant.\n\n{{TOOLS}}"
 	agent.SetSystemPrompt(customPrompt)
@@ -413,15 +406,11 @@ func TestReActAgentDefaultPromptHasTools(t *testing.T) {
 
 	agent := NewReActAgent(mockLLM, DefaultConfig(), log)
 
-	echoTool := &Tool{
-		Name:        "echo",
-		Description: "Echo text",
-		Execute: func(input map[string]interface{}) (string, error) {
-			text, _ := input["text"].(string)
-			return text, nil
-		},
+	err := tools.RegisterBuiltinToolsTo(agent)
+	if err != nil {
+		t.Error(err)
+		return
 	}
-	agent.RegisterTool(echoTool)
 
 	gotPrompt := agent.GetSystemPrompt()
 	if !strings.Contains(gotPrompt, "Available tools:") {

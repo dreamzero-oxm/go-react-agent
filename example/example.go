@@ -49,10 +49,10 @@ func main() {
 
 	reactAgent := agent.NewReActAgent(openaiLLM, agentConfig, multiLog)
 
-	customTool := &agent.Tool{
+	customTool := &tools.Tool{
 		Name:        "get_weather",
 		Description: "Get current weather for a city",
-		Parameters: map[string]agent.Parameter{
+		Parameters: map[string]tools.Parameter{
 			"city": {
 				Type:        "string",
 				Description: "Name of the city",
