@@ -31,8 +31,8 @@ func main() {
 
 	llmConfig := &llm.LLMConfig{
 		APIKey:      apiKey,
-		BaseURL:     "https://api.openai.com/v1/chat/completions",
-		Model:       "gpt-3.5-turbo",
+		BaseURL:     "https://open.bigmodel.cn/api/coding/paas/v4",
+		Model:       "glm-4.7",
 		Temperature: 0.7,
 		MaxTokens:   2000,
 	}
@@ -49,35 +49,14 @@ func main() {
 
 	reactAgent := agent.NewReActAgent(openaiLLM, agentConfig, multiLog)
 
-	customTool := &tools.Tool{
-		Name:        "get_weather",
-		Description: "Get current weather for a city",
-		Parameters: map[string]tools.Parameter{
-			"city": {
-				Type:        "string",
-				Description: "Name of the city",
-				Required:    true,
-			},
-		},
-		Execute: func(input map[string]interface{}) (string, error) {
-			city, ok := input["city"].(string)
-			if !ok {
-				return "", fmt.Errorf("city must be a string")
-			}
-			return fmt.Sprintf("Weather in %s: Sunny, 25°C", city), nil
-		},
-	}
-
-	if err := reactAgent.RegisterTool(customTool); err != nil {
+	if err := tools.RegisterBuiltinToolsTo(reactAgent); err != nil {
 		fmt.Printf("Failed to register tool: %v\n", err)
 		os.Exit(1)
 	}
 
-	tools.RegisterBuiltinToolsTo(reactAgent)
-
 	ctx := context.Background()
 
-	query := "What's the weather in Tokyo? Also, calculate 15 * 7 for me."
+	query := "现在的中国时间是多少，以及深圳对应的温度是多少"
 
 	fmt.Printf("Query: %s\n\n", query)
 
