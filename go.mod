@@ -1,4 +1,4 @@
-module github.com/go-react-agent
+module github.com/dreamzero-oxm/go-react-agent
 
 go 1.21
 

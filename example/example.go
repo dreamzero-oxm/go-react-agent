@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/go-react-agent/agent"
-	"github.com/go-react-agent/llm"
-	"github.com/go-react-agent/logger"
-	"github.com/go-react-agent/tools"
+	"github.com/dreamzero-oxm/go-react-agent/agent"
+	"github.com/dreamzero-oxm/go-react-agent/llm"
+	"github.com/dreamzero-oxm/go-react-agent/logger"
+	"github.com/dreamzero-oxm/go-react-agent/tools"
 )
 
 func main() {
