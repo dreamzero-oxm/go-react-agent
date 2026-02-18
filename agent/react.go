@@ -2,7 +2,6 @@ package agent
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -25,6 +24,7 @@ type ReActAgent struct {
 	config       *Config
 	logger       logger.Logger
 	systemPrompt string
+	parser       ResponseParser
 }
 
 func NewReActAgent(llm llm.LLM, config *Config, log logger.Logger) *ReActAgent {
@@ -32,11 +32,17 @@ func NewReActAgent(llm llm.LLM, config *Config, log logger.Logger) *ReActAgent {
 		config = DefaultConfig()
 	}
 
+	// Ensure parser is set
+	if config.Parser == nil {
+		config.Parser = NewJSONParser()
+	}
+
 	return &ReActAgent{
 		llm:    llm,
 		tools:  &simpleToolRegistry{tools: make(map[string]*Tool)},
 		config: config,
 		logger: log,
+		parser: config.Parser,
 	}
 }
 
@@ -45,11 +51,16 @@ func NewReActAgentWithRegistry(llm llm.LLM, config *Config, log logger.Logger, r
 		config = DefaultConfig()
 	}
 
+	if config.Parser == nil {
+		config.Parser = NewJSONParser()
+	}
+
 	return &ReActAgent{
 		llm:    llm,
 		tools:  registry,
 		config: config,
 		logger: log,
+		parser: config.Parser,
 	}
 }
 
@@ -146,69 +157,112 @@ func (a *ReActAgent) GetSystemPrompt() string {
 You should follow this iterative loop:
 
 1. **Thought**: Analyze the current situation and decide what action to take
-2. **Action**: Execute a tool or operation using the specified format
+2. **Action**: Execute a tool or operation
 3. **Observation**: Review the tool result and extract relevant information
 4. **Iteration**: Repeat until you have enough information to provide a final answer
 
 ## Response Format
 
-When using tools, follow this exact format:
+IMPORTANT: You must respond with a valid JSON object only. Do not include any additional text or markdown formatting (except if the LLM automatically wraps in markdown code blocks).
 
-Thought: [Your reasoning about what information you need and why]
-Action: {"name": "tool_name", "input": {"param1": "value1", "param2": "value2"}}
+When using tools, respond with this JSON structure:
+
+{
+  "thoughts": [
+    {
+      "content": "Your reasoning about what information you need and why"
+    }
+  ],
+  "action": {
+    "name": "tool_name",
+    "input": {
+      "param1": "value1",
+      "param2": "value2"
+    }
+  },
+  "answer": null,
+  "done": false
+}
 
 After receiving a tool result, continue with:
 
-Thought: [Analyze the observation and plan your next step]
-Action: {"name": "tool_name", "input": {...}}
+{
+  "thoughts": [
+    {
+      "content": "Analyze the observation and plan your next step"
+    }
+  ],
+  "action": {
+    "name": "tool_name",
+    "input": {...}
+  },
+  "answer": null,
+  "done": false
+}
 
 When you have sufficient information to answer, respond with:
 
-Answer: [Your final, comprehensive answer]
+{
+  "thoughts": [
+    {
+      "content": "Your reasoning about having enough information"
+    }
+  ],
+  "action": null,
+  "answer": "Your final, comprehensive answer",
+  "done": true
+}
 
 ## Example Workflow
 
 User: "What's the weather in Tokyo and current time there?"
 
-Thought: I need to get the weather information for Tokyo first
-Action: {"name": "get_weather", "input": {"city": "Tokyo"}}
+Response:
+{
+  "thoughts": [{"content": "I need to get the weather information for Tokyo first"}],
+  "action": {"name": "get_weather", "input": {"city": "Tokyo"}},
+  "answer": null,
+  "done": false
+}
 
-Thought: Now I have the weather, I need to get the current time in Tokyo
-Action: {"name": "get_time", "input": {"timezone": "Asia/Tokyo"}}
+Response:
+{
+  "thoughts": [{"content": "Now I have the weather, I need to get the current time in Tokyo"}],
+  "action": {"name": "get_time", "input": {"timezone": "Asia/Tokyo"}},
+  "answer": null,
+  "done": false
+}
 
-Thought: I have both weather and time information, so I can provide a complete answer
-Answer: The current weather in Tokyo is 22°C with clear skies, and the local time is 14:30.
+Response:
+{
+  "thoughts": [{"content": "I have both weather and time information, so I can provide a complete answer"}],
+  "action": null,
+  "answer": "The current weather in Tokyo is 22°C with clear skies, and the local time is 14:30.",
+  "done": true
+}
 
 ## Important Guidelines
 
 ### Thinking Process
-- Always explain your reasoning clearly before taking action
+- Always explain your reasoning clearly in the thoughts array
 - Consider what information you currently have and what you still need
 - Plan multiple steps ahead when dealing with complex tasks
-- Be specific about why you're choosing a particular tool
 
 ### Tool Usage
 - Use tools only when they provide value for answering the question
 - Always provide all required parameters for the tool
-- If a tool requires optional parameters, include them when relevant
 - Verify the tool output matches your expectations
 
 ### Error Handling
-- If a tool fails, explain the error and try an alternative approach
+- If a tool fails, explain the error in thoughts and try an alternative approach
 - Don't give up after the first failure - consider other tools or strategies
-- If a tool returns unexpected results, analyze why and adjust your approach
 
-### Answer Quality
-- Provide complete, well-structured answers
-- Include relevant context and reasoning when helpful
-- Be concise but comprehensive
-- If information is uncertain, acknowledge the uncertainty
-
-### Efficiency
-- Avoid redundant tool calls
-- Combine related operations when possible
-- Don't use tools when you can answer from general knowledge
-- Stay focused on the user's actual question
+### JSON Format Requirements
+- Response must be valid JSON
+- "thoughts" must be a non-empty array
+- "action" and "answer" are mutually exclusive (one must be null)
+- "done" must be true only when providing an answer
+- You may wrap JSON in markdown code blocks if needed
 
 ## Available Tools
 
@@ -217,25 +271,14 @@ Available tools:\n
 
 ## Critical Rules
 
-1. **Always** provide a Thought before each Action
-2. **Never** skip the Observation step - always analyze tool results
-3. **Provide** an Answer only when you have sufficient information
+1. **Always** provide thoughts explaining your reasoning
+2. **Response must be valid JSON**
+3. **NEVER** mix action and answer in the same response
 4. **Be** specific and detailed in your reasoning
 5. **Handle** errors gracefully and try alternative approaches
 6. **Avoid** unnecessary tool calls when general knowledge suffices
-7. **Maintain** context across multiple tool uses
-8. **Be** honest about limitations and uncertainties
 
-## Quality Checklist
-
-Before providing your final Answer, ensure:
-- [ ] You have gathered all necessary information
-- [ ] Tool results are accurate and relevant
-- [ ] Your reasoning is sound and logical
-- [ ] Your answer directly addresses the user's question
-- [ ] You've provided appropriate context and explanations
-
-Remember: Your goal is to be helpful, accurate, and efficient. Use tools strategically to gather information, but rely on your knowledge and reasoning capabilities whenever possible.`)
+Remember: Your goal is to be helpful, accurate, and efficient. Always respond with valid JSON.`)
 }
 
 func (a *ReActAgent) injectToolsIntoPrompt(prompt string) string {
@@ -408,66 +451,7 @@ func (a *ReActAgent) RunWithCallback(ctx context.Context, query string, callback
 }
 
 func (a *ReActAgent) parseResponse(response string) (*ReActResponse, error) {
-	result := &ReActResponse{
-		Thoughts: make([]Thought, 0),
-	}
-
-	lines := strings.Split(response, "\n")
-
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
-
-		if strings.HasPrefix(line, "Thought:") {
-			thoughtContent := strings.TrimSpace(strings.TrimPrefix(line, "Thought:"))
-			result.Thoughts = append(result.Thoughts, Thought{
-				Content: thoughtContent,
-			})
-		} else if strings.HasPrefix(line, "Action:") {
-			actionJSON := strings.TrimSpace(strings.TrimPrefix(line, "Action:"))
-			action, err := a.parseAction(actionJSON)
-			if err != nil {
-				return nil, fmt.Errorf("failed to parse action: %w", err)
-			}
-			result.Action = action
-		} else if strings.HasPrefix(line, "Answer:") {
-			answer := strings.TrimSpace(strings.TrimPrefix(line, "Answer:"))
-			result.Answer = answer
-			result.Done = true
-		}
-	}
-
-	if len(result.Thoughts) == 0 && result.Action == nil && result.Answer == "" {
-		return nil, fmt.Errorf("invalid response format")
-	}
-
-	return result, nil
-}
-
-func (a *ReActAgent) parseAction(actionStr string) (*Action, error) {
-	var action struct {
-		Name  string                 `json:"name"`
-		Input map[string]interface{} `json:"input"`
-	}
-
-	if err := json.Unmarshal([]byte(actionStr), &action); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal action JSON: %w", err)
-	}
-
-	if action.Name == "" {
-		return nil, fmt.Errorf("action name is required")
-	}
-
-	if action.Input == nil {
-		action.Input = make(map[string]interface{})
-	}
-
-	return &Action{
-		Name:  action.Name,
-		Input: action.Input,
-	}, nil
+	return a.parser.Parse(response)
 }
 
 func (a *ReActAgent) Stream(ctx context.Context, query string, callback func(chunk string)) error {

@@ -28,10 +28,38 @@ ReAct is a paradigm that combines reasoning and acting in an iterative loop:
 3. **Observation** - The agent observes the result and updates its understanding
 4. **Iteration** - The cycle repeats until the agent reaches a solution
 
+### 📋 JSON Response Format
+
+The agent uses structured JSON responses for reliable parsing. LLMs respond with this format:
+
+**For tool actions:**
+```json
+{
+  "thoughts": [{"content": "I need to use a tool"}],
+  "action": {"name": "tool_name", "input": {"param": "value"}},
+  "answer": null,
+  "done": false
+}
+```
+
+**For final answers:**
+```json
+{
+  "thoughts": [{"content": "I have enough information"}],
+  "action": null,
+  "answer": "Final answer here",
+  "done": true
+}
+```
+
+The parser automatically handles markdown code blocks (` ```json ... ` ` `) and validates responses for correctness.
+
 ## ✨ Features
 
 - **🧠 Complete ReAct Architecture** - Full implementation of the Thought-Action-Observation loop
+- **📋 JSON-Based Parsing** - Structured JSON responses with automatic validation and markdown handling
 - **🔌 Multi-LLM Support** - Support for 10+ LLM providers including OpenAI, Anthropic, Google Gemini, Cohere, Mistral AI, AWS Bedrock, 阿里云通义千问, 百度文心一言, Ollama, and custom providers
+- **🔧 Pluggable Parsers** - Custom response parsers via `ResponseParser` interface for specialized formats
 - **🌐 Comprehensive Coverage** - Global LLM support including Chinese and international providers
 - **🛠️ Tool System** - Extensible tool registration with built-in tools and easy custom tool creation
 - **📝 Flexible Logging** - Console, file, and external logger support with configurable levels
@@ -297,11 +325,12 @@ llm, err := llm.NewLLMWithProvider(llm.ProviderGemini, "your-api-key", "gemini-p
 config := &agent.Config{
     MaxIterations: 10,
     Timeout:       5 * time.Minute,
+    Parser:        agent.NewJSONParser(),  // Use default JSON parser
 }
 reactAgent := agent.NewReActAgent(llm, config, log)
 ```
 
-Or use defaults:
+Or use defaults (includes JSON parser):
 
 ```go
 config := agent.DefaultConfig()
@@ -314,6 +343,32 @@ config := agent.DefaultConfig()
 - `LevelWarn` - Warning messages
 - `LevelError` - Error messages only
 - `LevelFatal` - Fatal errors that cause program exit
+
+#### Custom Response Parsers
+
+Implement the `ResponseParser` interface for custom response formats:
+
+```go
+// Define a custom parser
+type XMLParser struct{}
+
+func (x *XMLParser) Parse(response string) (*agent.ReActResponse, error) {
+    // Your custom parsing logic
+    // For example: parse XML format instead of JSON
+    // ...
+    return &agent.ReActResponse{}, nil
+}
+
+// Use the custom parser
+config := agent.DefaultConfig()
+config.Parser = &XMLParser{}
+reactAgent := agent.NewReActAgent(llm, config, log)
+```
+
+This is useful when:
+- Using LLMs that don't support JSON output well
+- Working with specialized response formats
+- Implementing custom validation or preprocessing
 
 ### Built-in Tools
 
