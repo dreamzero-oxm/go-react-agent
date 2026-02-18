@@ -88,25 +88,37 @@ func TestReActAgentParseResponse(t *testing.T) {
 	}{
 		{
 			name:     "Answer only",
-			response: "Answer: This is the answer",
+			response: `{"thoughts":[{"content":"I have the answer"}],"action":null,"answer":"This is the answer","done":true}`,
 			wantDone: true,
 			wantErr:  false,
 		},
 		{
 			name:     "Thought and Answer",
-			response: "Thought: I need to think\nAnswer: Final answer",
+			response: `{"thoughts":[{"content":"I need to think"}],"action":null,"answer":"Final answer","done":true}`,
 			wantDone: true,
 			wantErr:  false,
 		},
 		{
 			name:     "Thought and Action",
-			response: "Thought: I should use a tool\nAction: {\"name\": \"test\", \"input\": {}}",
+			response: `{"thoughts":[{"content":"I should use a tool"}],"action":{"name":"test","input":{}},"answer":"","done":false}`,
 			wantDone: false,
 			wantErr:  false,
 		},
 		{
-			name:     "Invalid response",
-			response: "Invalid format",
+			name:     "Invalid JSON",
+			response: `Invalid format`,
+			wantDone: false,
+			wantErr:  true,
+		},
+		{
+			name:     "No thoughts",
+			response: `{"thoughts":[],"action":null,"answer":"answer","done":true}`,
+			wantDone: false,
+			wantErr:  true,
+		},
+		{
+			name:     "Both action and answer",
+			response: `{"thoughts":[{"content":"test"}],"action":{"name":"test","input":{}},"answer":"answer","done":false}`,
 			wantDone: false,
 			wantErr:  true,
 		},
@@ -128,35 +140,13 @@ func TestReActAgentParseResponse(t *testing.T) {
 	}
 }
 
-func TestReActAgentParseAction(t *testing.T) {
-	log := logger.NewMultiLogger()
-	log.Disable()
-	mockLLM := &MockLLMForTest{}
-	agent := NewReActAgent(mockLLM, DefaultConfig(), log)
-
-	actionStr := `{"name": "test_tool", "input": {"param1": "value1", "param2": 123}}`
-
-	action, err := agent.parseAction(actionStr)
-	if err != nil {
-		t.Fatalf("Failed to parse action: %v", err)
-	}
-
-	if action.Name != "test_tool" {
-		t.Errorf("Expected name 'test_tool', got '%s'", action.Name)
-	}
-
-	if action.Input["param1"] != "value1" {
-		t.Errorf("Expected param1 'value1', got '%v'", action.Input["param1"])
-	}
-}
-
 func TestReActAgentRun(t *testing.T) {
 	log := logger.NewMultiLogger()
 	log.Disable()
 
 	mockLLM := &MockLLMForTest{
 		responses: []string{
-			"Answer: The answer is 42",
+			`{"thoughts":[{"content":"I have the answer"}],"action":null,"answer":"The answer is 42","done":true}`,
 		},
 	}
 
@@ -182,8 +172,8 @@ func TestReActAgentRunWithTools(t *testing.T) {
 
 	mockLLM := &MockLLMForTest{
 		responses: []string{
-			"Thought: I need to use a tool\nAction: {\"name\": \"echo\", \"input\": {\"text\": \"hello\"}}",
-			"Thought: Based on the tool result, I can now answer\nAnswer: The tool returned hello",
+			`{"thoughts":[{"content":"I need to use a tool"}],"action":{"name":"echo","input":{"text":"hello"}},"answer":"","done":false}`,
+			`{"thoughts":[{"content":"Based on the tool result, I can now answer"}],"action":null,"answer":"The tool returned hello","done":true}`,
 		},
 	}
 
@@ -226,8 +216,8 @@ func TestReActAgentRunWithCallback(t *testing.T) {
 
 	mockLLM := &MockLLMForTest{
 		responses: []string{
-			"Thought: Using echo tool\nAction: {\"name\": \"echo\", \"input\": {\"text\": \"test\"}}",
-			"Answer: Complete",
+			`{"thoughts":[{"content":"Using echo tool"}],"action":{"name":"echo","input":{"text":"test"}},"answer":"","done":false}`,
+			`{"thoughts":[{"content":"Done"}],"action":null,"answer":"Complete","done":true}`,
 		},
 	}
 
@@ -275,7 +265,7 @@ func TestReActAgentMaxIterations(t *testing.T) {
 
 	responses := make([]string, 20)
 	for i := 0; i < 20; i++ {
-		responses[i] = "Thought: Thinking...\nAction: {\"name\": \"echo\", \"input\": {\"text\": \"test\"}}"
+		responses[i] = `{"thoughts":[{"content":"Thinking..."}],"action":{"name":"echo","input":{"text":"test"}},"answer":"","done":false}`
 	}
 
 	mockLLM := &MockLLMForTest{responses: responses}
@@ -311,7 +301,7 @@ func TestReActAgentTimeout(t *testing.T) {
 
 	mockLLM := &MockLLMForTest{
 		responses: []string{
-			"Thought: Thinking...",
+			`{"thoughts":[{"content":"Thinking..."}],"action":null,"answer":"","done":false}`,
 		},
 	}
 
@@ -346,9 +336,9 @@ func TestReActAgentSystemPrompt(t *testing.T) {
 	agent.SetSystemPrompt(customPrompt)
 
 	gotPrompt := agent.GetSystemPrompt()
-	targetPrompt := customPrompt + "\n\n## Available Tools\n\nAvailable tools:\n"
+	targetPrompt := customPrompt + "\n\n## Available Tools\n\n"
 	if gotPrompt != targetPrompt {
-		t.Errorf("Expected custom prompt '%s', got '%s'", customPrompt, gotPrompt)
+		t.Errorf("Expected custom prompt to end with proper format, got:\n%s\n\nexpected to end with:\n%s", gotPrompt, targetPrompt)
 	}
 }
 
