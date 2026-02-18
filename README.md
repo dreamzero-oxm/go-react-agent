@@ -4,7 +4,7 @@
 
 ![Go](https://img.shields.io/badge/Go-1.21+-00ADD8?style=flat-square&logo=go)
 ![License](https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square)
-![Go Report](https://goreportcard.com/badge/github.com/go-react-agent?style=flat-square)
+![Go Report](https://goreportcard.com/badge/github.com/dreamzero-oxm/go-react-agent?style=flat-square)
 ![Tests](https://img.shields.io/badge/tests-passing-brightgreen.svg?style=flat-square)
 
 **A high-performance, production-ready ReAct Agent framework for building intelligent AI agents in Go**
@@ -75,7 +75,7 @@ The parser automatically handles markdown code blocks (` ```json ... ` ` `) and 
 ## 📦 Installation
 
 ```bash
-go get github.com/go-react-agent
+go get github.com/dreamzero-oxm/go-react-agent
 ```
 
 ## 🚀 Quick Start
@@ -90,10 +90,10 @@ import (
     "fmt"
     "os"
 
-    "github.com/go-react-agent/agent"
-    "github.com/go-react-agent/logger"
-    "github.com/go-react-agent/llm"
-    "github.com/go-react-agent/tools"
+    "github.com/dreamzero-oxm/go-react-agent/agent"
+    "github.com/dreamzero-oxm/go-react-agent/logger"
+    "github.com/dreamzero-oxm/go-react-agent/llm"
+    "github.com/dreamzero-oxm/go-react-agent/tools"
 )
 
 func main() {
@@ -577,8 +577,8 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 🔗 Links
 
-- [GitHub Repository](https://github.com/go-react-agent/go-react-agent)
-- [API Documentation](https://pkg.go.dev/github.com/go-react-agent)
+- [GitHub Repository](https://github.com/dreamzero-oxm/go-react-agent)
+- [API Documentation](https://pkg.go.dev/github.com/dreamzero-oxm/go-react-agent)
 - [Examples](./example/)
 
 ---

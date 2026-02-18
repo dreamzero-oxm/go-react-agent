@@ -3,8 +3,8 @@ package agent
 import (
 	"context"
 
-	"github.com/go-react-agent/llm"
-	"github.com/go-react-agent/logger"
+	"github.com/dreamzero-oxm/go-react-agent/llm"
+	"github.com/dreamzero-oxm/go-react-agent/logger"
 )
 
 type Agent interface {

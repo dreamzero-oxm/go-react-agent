@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/go-react-agent/llm"
-	"github.com/go-react-agent/logger"
-	"github.com/go-react-agent/tools"
+	"github.com/dreamzero-oxm/go-react-agent/llm"
+	"github.com/dreamzero-oxm/go-react-agent/logger"
+	"github.com/dreamzero-oxm/go-react-agent/tools"
 )
 
 type ToolRegistry interface {
