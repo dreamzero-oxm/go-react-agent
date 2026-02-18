@@ -1,0 +1,396 @@
+# Go ReAct Agent
+
+<div align="center">
+
+![Go](https://img.shields.io/badge/Go-1.21+-00ADD8?style=flat-square&logo=go)
+![License](https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square)
+![Go Report](https://goreportcard.com/badge/github.com/go-react-agent?style=flat-square)
+![Tests](https://img.shields.io/badge/tests-passing-brightgreen.svg?style=flat-square)
+
+**A high-performance, production-ready ReAct Agent framework for building intelligent AI agents in Go**
+
+[Features](#-features) • [Installation](#-installation) • [Quick Start](#-quick-start) • [Documentation](#-documentation) • [Examples](#-examples)
+
+</div>
+
+---
+
+## 📖 About
+
+Go ReAct Agent is a powerful framework for building intelligent agents that can reason, act, and observe using Large Language Models (LLMs). It implements the ReAct (Reasoning + Acting) pattern, enabling agents to break down complex tasks into manageable steps and use tools to accomplish goals.
+
+### 🎯 What is ReAct?
+
+ReAct is a paradigm that combines reasoning and acting in an iterative loop:
+
+1. **Reasoning** (Thought) - The agent thinks about what action to take
+2. **Acting** (Action) - The agent executes a tool or operation
+3. **Observation** - The agent observes the result and updates its understanding
+4. **Iteration** - The cycle repeats until the agent reaches a solution
+
+## ✨ Features
+
+- **🧠 Complete ReAct Architecture** - Full implementation of the Thought-Action-Observation loop
+- **🔌 Multi-LLM Support** - OpenAI, Anthropic, and custom LLM providers via unified interface
+- **🛠️ Tool System** - Extensible tool registration with built-in tools and easy custom tool creation
+- **📝 Flexible Logging** - Console, file, and external logger support with configurable levels
+- **⚡ Production-Ready** - Comprehensive error handling, timeouts, and context management
+- **✅ Extensive Testing** - Full unit test coverage with mock implementations
+- **📦 Easy Integration** - Clean package structure for seamless external imports
+- **🎛️ Configurable** - Highly customizable agent behavior and system prompts
+- **🔄 Streaming Support** - Real-time streaming of agent responses
+- **📊 Callback System** - Monitor agent execution step-by-step with callbacks
+
+## 📦 Installation
+
+```bash
+go get github.com/go-react-agent
+```
+
+## 🚀 Quick Start
+
+### Basic Example
+
+```go
+package main
+
+import (
+    "context"
+    "fmt"
+    "os"
+
+    "github.com/go-react-agent/agent"
+    "github.com/go-react-agent/logger"
+    "github.com/go-react-agent/llm"
+    "github.com/go-react-agent/tools"
+)
+
+func main() {
+    // Setup logging
+    multiLog := logger.NewMultiLogger()
+    multiLog.SetLevel(logger.LevelInfo)
+    multiLog.AddConsoleLogger(true)
+
+    // Configure LLM
+    llmConfig := &llm.LLMConfig{
+        APIKey:      os.Getenv("OPENAI_API_KEY"),
+        BaseURL:     "https://api.openai.com/v1/chat/completions",
+        Model:       "gpt-3.5-turbo",
+        Temperature: 0.7,
+        MaxTokens:   2000,
+    }
+
+    openaiLLM, err := llm.NewOpenAILLM(llmConfig)
+    if err != nil {
+        panic(err)
+    }
+    defer openaiLLM.Close()
+
+    // Create agent with built-in tools
+    reactAgent := agent.NewReActAgent(openaiLLM, agent.DefaultConfig(), multiLog)
+    tools.RegisterBuiltinToolsTo(reactAgent)
+
+    // Run the agent
+    ctx := context.Background()
+    response, err := reactAgent.Run(ctx, "Calculate 15 * 7 and tell me the result")
+    if err != nil {
+        panic(err)
+    }
+
+    fmt.Printf("Answer: %s\n", response.Answer)
+}
+```
+
+### 🛠️ Custom Tools
+
+Create custom tools to extend agent capabilities:
+
+```go
+customTool := &agent.Tool{
+    Name:        "get_weather",
+    Description: "Get current weather for a city",
+    Parameters: map[string]agent.Parameter{
+        "city": {
+            Type:        "string",
+            Description: "Name of the city",
+            Required:    true,
+        },
+    },
+    Execute: func(input map[string]interface{}) (string, error) {
+        city, _ := input["city"].(string)
+        return fmt.Sprintf("Weather in %s: Sunny, 25°C", city), nil
+    },
+}
+
+if err := reactAgent.RegisterTool(customTool); err != nil {
+    panic(err)
+}
+```
+
+### 📊 Monitoring with Callbacks
+
+Track agent execution in real-time:
+
+```go
+response, err := reactAgent.RunWithCallback(ctx, query, func(step *agent.Step) {
+    if step.Action != nil {
+        fmt.Printf("Action: %s\n", step.Action.Name)
+        fmt.Printf("  Input: %v\n", step.Action.Input)
+    }
+    if step.Observation != nil {
+        fmt.Printf("Observation: %s\n", step.Observation.Content)
+    }
+    if step.Error != "" {
+        fmt.Printf("Error: %s\n", step.Error)
+    }
+})
+```
+
+## 📚 Documentation
+
+### Configuration
+
+#### Agent Configuration
+
+```go
+config := &agent.Config{
+    MaxIterations: 10,
+    Timeout:       5 * time.Minute,
+}
+reactAgent := agent.NewReActAgent(llm, config, log)
+```
+
+Or use defaults:
+
+```go
+config := agent.DefaultConfig()
+```
+
+#### Logging Levels
+
+- `LevelDebug` - Detailed debugging information
+- `LevelInfo` - General informational messages (default)
+- `LevelWarn` - Warning messages
+- `LevelError` - Error messages only
+- `LevelFatal` - Fatal errors that cause program exit
+
+### Built-in Tools
+
+The framework includes these ready-to-use tools:
+
+| Tool | Description |
+|------|-------------|
+| `calculate` | Perform arithmetic calculations |
+| `http_get` | Make HTTP GET requests |
+| `read_file` | Read file contents |
+| `write_file` | Write content to files |
+| `echo` | Echo back text |
+| `search_files` | Search for files matching a pattern |
+
+Register all built-in tools:
+
+```go
+tools.RegisterBuiltinToolsTo(reactAgent)
+```
+
+### API Reference
+
+#### Agent Methods
+
+| Method | Description |
+|--------|-------------|
+| `NewReActAgent(llm, config, log)` | Create a new ReAct agent |
+| `Run(ctx, query)` | Run agent with a query |
+| `RunWithCallback(ctx, query, callback)` | Run with step callbacks |
+| `RegisterTool(tool)` | Register a custom tool |
+| `UnregisterTool(name)` | Unregister a tool |
+| `SetSystemPrompt(prompt)` | Set custom system prompt |
+| `Close()` | Close agent and release resources |
+
+#### Tool Structure
+
+```go
+type Tool struct {
+    Name        string                      // Tool identifier
+    Description string                      // Tool description
+    Parameters  map[string]Parameter        // Parameter definitions
+    Execute     func(input map[string]interface{}) (string, error) // Execution logic
+}
+
+type Parameter struct {
+    Type        string  // Parameter type
+    Description string  // Parameter description
+    Required    bool    // Whether required
+}
+```
+
+## 🧪 Testing
+
+Run all tests:
+
+```bash
+go test ./...
+```
+
+Run tests with coverage:
+
+```bash
+go test -cover ./...
+```
+
+Run tests with verbose output:
+
+```bash
+go test -v ./...
+```
+
+Run tests for a specific package:
+
+```bash
+go test ./agent -v
+go test ./llm -v
+go test ./logger -v
+go test ./tools -v
+```
+
+## 💡 Examples
+
+### Example 1: Basic Agent
+
+See [example/example.go](example/example.go) for a complete working example.
+
+```bash
+cd example
+export OPENAI_API_KEY="your-api-key"
+go run example.go
+```
+
+### Example 2: Custom Tools
+
+```go
+// Define a custom tool
+weatherTool := &agent.Tool{
+    Name:        "get_weather",
+    Description: "Get current weather for a location",
+    Parameters: map[string]agent.Parameter{
+        "location": {
+            Type:        "string",
+            Description: "City name or coordinates",
+            Required:    true,
+        },
+    },
+    Execute: func(input map[string]interface{}) (string, error) {
+        location := input["location"].(string)
+        return fmt.Sprintf("Weather in %s: 72°F, Sunny", location), nil
+    },
+}
+
+agent.RegisterTool(weatherTool)
+```
+
+### Example 3: Advanced Logging
+
+```go
+// Setup multiple log outputs
+multiLog := logger.NewMultiLogger()
+multiLog.SetLevel(logger.LevelDebug)
+
+// Console logging with colors
+multiLog.AddConsoleLogger(true)
+
+// File logging
+fileLog, err := multiLog.AddFileLogger("agent.log")
+if err != nil {
+    panic(err)
+}
+defer fileLog.Close()
+
+// External logger integration
+type CustomLogger struct{}
+
+func (l *CustomLogger) Log(level logger.Level, msg string, fields map[string]interface{}) {
+    fmt.Printf("[%s] %s %v\n", level, msg, fields)
+}
+
+multiLog.SetExternalLogger(&CustomLogger{})
+
+// Toggle logging on/off
+multiLog.Disable()
+multiLog.Enable()
+```
+
+## 🎯 Best Practices
+
+### Tool Development
+
+- **Single Responsibility**: Keep tools focused on one specific task
+- **Clear Descriptions**: Provide detailed descriptions for better agent understanding
+- **Parameter Validation**: Always validate input parameters before execution
+- **Error Handling**: Return descriptive errors that help agents understand failures
+- **Idempotency**: Make tools idempotent when possible
+
+### Agent Usage
+
+- **Resource Management**: Always close LLM and logger instances when done
+- **Timeouts**: Set appropriate timeouts for your use case
+- **Context**: Always use context for cancellation support
+- **Logging**: Use appropriate log levels (Debug for development, Info for production)
+- **System Prompts**: Customize system prompts for specific use cases
+- **Testing**: Use mock LLMs for unit testing
+
+### Performance
+
+- **Tool Efficiency**: Keep tool execution fast to minimize latency
+- **Batch Operations**: Group related operations when possible
+- **Caching**: Implement caching for expensive operations
+- **Concurrency**: Use goroutines for parallel independent operations
+
+## 🤝 Contributing
+
+We welcome contributions! Here's how you can help:
+
+1. **Fork the repository**
+2. **Create a feature branch** (`git checkout -b feature/amazing-feature`)
+3. **Commit your changes** (`git commit -m 'Add amazing feature'`)
+4. **Push to the branch** (`git push origin feature/amazing-feature`)
+5. **Open a Pull Request**
+
+### Development Guidelines
+
+- Follow Go conventions and best practices
+- Write tests for new functionality
+- Update documentation as needed
+- Ensure all tests pass before submitting
+- Use meaningful commit messages
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🙏 Acknowledgments
+
+- ReAct paper: "ReAct: Synergizing Reasoning and Acting in Language Models"
+- OpenAI for GPT models and API
+- The Go community for excellent tooling and libraries
+
+## 📞 Support
+
+- **Issues**: Open an issue on GitHub for bugs or feature requests
+- **Discussions**: Use GitHub Discussions for questions and ideas
+- **Documentation**: Check inline code documentation for detailed API info
+
+## 🔗 Links
+
+- [GitHub Repository](https://github.com/go-react-agent/go-react-agent)
+- [API Documentation](https://pkg.go.dev/github.com/go-react-agent)
+- [Examples](./example/)
+
+---
+
+<div align="center">
+
+**Made with ❤️ by the Go ReAct Agent community**
+
+[⬆ Back to Top](#go-react-agent)
+
+</div>
