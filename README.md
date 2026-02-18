@@ -31,7 +31,8 @@ ReAct is a paradigm that combines reasoning and acting in an iterative loop:
 ## ✨ Features
 
 - **🧠 Complete ReAct Architecture** - Full implementation of the Thought-Action-Observation loop
-- **🔌 Multi-LLM Support** - OpenAI, Anthropic, and custom LLM providers via unified interface
+- **🔌 Multi-LLM Support** - Support for 10+ LLM providers including OpenAI, Anthropic, Google Gemini, Cohere, Mistral AI, AWS Bedrock, 阿里云通义千问, 百度文心一言, Ollama, and custom providers
+- **🌐 Comprehensive Coverage** - Global LLM support including Chinese and international providers
 - **🛠️ Tool System** - Extensible tool registration with built-in tools and easy custom tool creation
 - **📝 Flexible Logging** - Console, file, and external logger support with configurable levels
 - **⚡ Production-Ready** - Comprehensive error handling, timeouts, and context management
@@ -40,6 +41,8 @@ ReAct is a paradigm that combines reasoning and acting in an iterative loop:
 - **🎛️ Configurable** - Highly customizable agent behavior and system prompts
 - **🔄 Streaming Support** - Real-time streaming of agent responses
 - **📊 Callback System** - Monitor agent execution step-by-step with callbacks
+- **🏪 Factory Pattern** - Unified LLM creation via factory interface
+- **🌍 Local & Cloud** - Support for both local models (Ollama) and cloud APIs
 
 ## 📦 Installation
 
@@ -147,6 +150,144 @@ response, err := reactAgent.RunWithCallback(ctx, query, func(step *agent.Step) {
 ```
 
 ## 📚 Documentation
+
+### LLM Providers
+
+The framework supports multiple LLM providers with unified configuration:
+
+#### Supported Providers
+
+| Provider | Description | Default Model |
+|----------|-------------|----------------|
+| `openai` | OpenAI GPT models | `gpt-3.5-turbo` |
+| `anthropic` | Anthropic Claude models | `claude-3-sonnet-20240229` |
+| `gemini` | Google Gemini models | `gemini-pro` |
+| `cohere` | Cohere models | `command-r-plus` |
+| `mistral` | Mistral AI models | `mistral-large-latest` |
+| `bedrock` | AWS Bedrock | `anthropic.claude-3-sonnet-20240229-v1:0` |
+| `dashscope` | 阿里云通义千问 | `qwen-turbo` |
+| `wenxin` | 百度文心一言 | `ERNIE-Bot-4` |
+| `ollama` | Ollama local models | `llama2` |
+| `generic` | Generic REST API | `default-model` |
+| `custom` | Custom implementations | N/A |
+
+#### Configuration Examples
+
+**OpenAI**
+```go
+config := &llm.LLMConfig{
+    Provider: llm.ProviderOpenAI,
+    APIKey:   os.Getenv("OPENAI_API_KEY"),
+    Model:    "gpt-4",
+    Temperature: 0.7,
+    MaxTokens:  2000,
+}
+llm, _ := llm.NewLLM(config)
+```
+
+**Anthropic Claude**
+```go
+config := &llm.LLMConfig{
+    Provider: llm.ProviderAnthropic,
+    APIKey:   os.Getenv("ANTHROPIC_API_KEY"),
+    Model:    "claude-3-opus-20240229",
+    Temperature: 0.7,
+    MaxTokens:  4000,
+}
+llm, _ := llm.NewLLM(config)
+```
+
+**Google Gemini**
+```go
+config := &llm.LLMConfig{
+    Provider: llm.ProviderGemini,
+    APIKey:   os.Getenv("GEMINI_API_KEY"),
+    Model:    "gemini-pro",
+    Temperature: 0.7,
+    MaxTokens:  2000,
+}
+llm, _ := llm.NewLLM(config)
+```
+
+**阿里云通义千问**
+```go
+config := &llm.LLMConfig{
+    Provider: llm.ProviderDashScope,
+    APIKey:   os.Getenv("DASHSCOPE_API_KEY"),
+    Model:    "qwen-plus",
+    Temperature: 0.7,
+    MaxTokens:  2000,
+}
+llm, _ := llm.NewLLM(config)
+```
+
+**百度文心一言**
+```go
+config := &llm.LLMConfig{
+    Provider: llm.ProviderWenxin,
+    APIKey:   os.Getenv("WENXIN_API_KEY") + "|" + os.Getenv("WENXIN_SECRET_KEY"),
+    Model:    "ERNIE-Bot-4",
+    Temperature: 0.7,
+    MaxTokens:  2000,
+}
+llm, _ := llm.NewLLM(config)
+```
+
+**Ollama (Local Models)**
+```go
+config := &llm.LLMConfig{
+    Provider: llm.ProviderOllama,
+    BaseURL:  "http://localhost:11434/api/chat",
+    Model:    "llama2",
+    Temperature: 0.7,
+    MaxTokens:  2000,
+}
+llm, _ := llm.NewLLM(config)
+```
+
+**AWS Bedrock**
+```go
+config := &llm.LLMConfig{
+    Provider:    llm.ProviderBedrock,
+    AccessKeyID:  os.Getenv("AWS_ACCESS_KEY_ID"),
+    SecretAccessKey: os.Getenv("AWS_SECRET_ACCESS_KEY"),
+    Region:      "us-east-1",
+    Model:       "anthropic.claude-3-sonnet-20240229-v1:0",
+    Temperature: 0.7,
+    MaxTokens:   2000,
+}
+llm, _ := llm.NewLLM(config)
+```
+
+**Generic REST API**
+```go
+config := &llm.LLMConfig{
+    Provider: llm.ProviderGeneric,
+    BaseURL:  "https://your-api.com/v1/chat/completions",
+    APIKey:   os.Getenv("YOUR_API_KEY"),
+    Model:    "your-model-name",
+    Temperature: 0.7,
+    MaxTokens:  2000,
+}
+llm, _ := llm.NewLLM(config)
+```
+
+#### Factory Pattern
+
+Use the unified factory to create LLM instances:
+
+```go
+// Using full config
+config := &llm.LLMConfig{
+    Provider: llm.ProviderOpenAI,
+    APIKey:   "your-api-key",
+    Model:    "gpt-4",
+}
+llm, err := llm.NewLLM(config)
+
+// Using helper function
+llm, err := llm.NewLLMWithProvider(llm.ProviderGemini, "your-api-key", "gemini-pro")
+```
 
 ### Configuration
 

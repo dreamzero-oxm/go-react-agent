@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -345,8 +346,99 @@ func TestReActAgentSystemPrompt(t *testing.T) {
 	agent.SetSystemPrompt(customPrompt)
 
 	gotPrompt := agent.GetSystemPrompt()
-	if gotPrompt != customPrompt {
+	targetPrompt := customPrompt + "\n\n## Available Tools\n\nAvailable tools:\n"
+	if gotPrompt != targetPrompt {
 		t.Errorf("Expected custom prompt '%s', got '%s'", customPrompt, gotPrompt)
+	}
+}
+
+func TestReActAgentSystemPromptWithToolPlaceholder(t *testing.T) {
+	log := logger.NewMultiLogger()
+	log.Disable()
+
+	mockLLM := &MockLLMForTest{}
+
+	agent := NewReActAgent(mockLLM, DefaultConfig(), log)
+
+	customPrompt := "You are a helpful assistant.\n\nAvailable tools:\n{{tools}}"
+	agent.SetSystemPrompt(customPrompt)
+	
+	echoTool := &Tool{
+		Name:        "echo",
+		Description: "Echo text",
+		Execute: func(input map[string]interface{}) (string, error) {
+			text, _ := input["text"].(string)
+			return text, nil
+		},
+	}
+	agent.RegisterTool(echoTool)
+
+	gotPrompt := agent.GetSystemPrompt()
+	if !strings.Contains(gotPrompt, "Available tools:") {
+		t.Errorf("Expected prompt to contain 'Available tools:', got '%s'", gotPrompt)
+	}
+	if !strings.Contains(gotPrompt, "echo") {
+		t.Errorf("Expected prompt to contain tool 'echo', got '%s'", gotPrompt)
+	}
+	if strings.Contains(gotPrompt, "{{tools}}") {
+		t.Errorf("Expected prompt to not contain placeholder '{{tools}}', got '%s'", gotPrompt)
+	}
+}
+
+func TestReActAgentSystemPromptWithCustomPlaceholder(t *testing.T) {
+	log := logger.NewMultiLogger()
+	log.Disable()
+
+	mockLLM := &MockLLMForTest{}
+
+	agent := NewReActAgent(mockLLM, DefaultConfig(), log)
+
+	echoTool := &Tool{
+		Name:        "echo",
+		Description: "Echo text",
+		Execute: func(input map[string]interface{}) (string, error) {
+			text, _ := input["text"].(string)
+			return text, nil
+		},
+	}
+	agent.RegisterTool(echoTool)
+
+	customPrompt := "You are a helpful assistant.\n\n{{TOOLS}}"
+	agent.SetSystemPrompt(customPrompt)
+
+	gotPrompt := agent.GetSystemPrompt()
+	if !strings.Contains(gotPrompt, "echo") {
+		t.Errorf("Expected prompt to contain tool 'echo', got '%s'", gotPrompt)
+	}
+	if strings.Contains(gotPrompt, "{{TOOLS}}") {
+		t.Errorf("Expected prompt to not contain placeholder '{{TOOLS}}', got '%s'", gotPrompt)
+	}
+}
+
+func TestReActAgentDefaultPromptHasTools(t *testing.T) {
+	log := logger.NewMultiLogger()
+	log.Disable()
+
+	mockLLM := &MockLLMForTest{}
+
+	agent := NewReActAgent(mockLLM, DefaultConfig(), log)
+
+	echoTool := &Tool{
+		Name:        "echo",
+		Description: "Echo text",
+		Execute: func(input map[string]interface{}) (string, error) {
+			text, _ := input["text"].(string)
+			return text, nil
+		},
+	}
+	agent.RegisterTool(echoTool)
+
+	gotPrompt := agent.GetSystemPrompt()
+	if !strings.Contains(gotPrompt, "Available tools:") {
+		t.Errorf("Expected default prompt to contain 'Available tools:', got '%s'", gotPrompt)
+	}
+	if !strings.Contains(gotPrompt, "echo") {
+		t.Errorf("Expected default prompt to contain tool 'echo', got '%s'", gotPrompt)
 	}
 }
 
