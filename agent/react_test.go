@@ -224,16 +224,7 @@ func TestReActAgentRunWithCallback(t *testing.T) {
 
 	agent := NewReActAgent(mockLLM, DefaultConfig(), log)
 
-	echoTool := &tools.Tool{
-		Name:        "echo",
-		Description: "Echo text",
-		Execute: func(input map[string]interface{}) (string, error) {
-			text, _ := input["text"].(string)
-			return text, nil
-		},
-	}
-
-	agent.RegisterTool(echoTool)
+	tools.RegisterBuiltinToolsTo(agent)
 
 	callbackCalled := false
 	var callbackStep *Step
