@@ -101,6 +101,7 @@ The parser automatically handles markdown code blocks (` ```json ... ` ` `) and 
 - **🏪 Factory Pattern** - Unified LLM creation via factory interface
 - **🌍 Local & Cloud** - Support for both local models (Ollama) and cloud APIs
 - **🎯 Planning Feature** - Intelligent task decomposition and adaptive re-planning
+- **📋 Structured Output** - User-defined struct output with automatic JSON schema generation
 
 ## 🎯 Planning Feature
 
@@ -166,6 +167,137 @@ planConfig := agent.DefaultPlanConfig() // Enabled defaults to false
 planningAgent := agent.NewReActAgentWithPlanning(llm, config, planConfig, log)
 response, err := planningAgent.Run(ctx, query) // Falls back to standard execution
 ```
+
+## 🎯 Structured Output Feature
+
+The framework supports structured output with user-defined Go structs. Agents can return responses that strictly match your custom struct definitions.
+
+### Why Structured Output?
+
+- **Type Safety**: Compile-time type checking for agent outputs
+- **IDE Support**: Auto-completion and refactoring support
+- **Validation**: Automatic JSON schema generation and validation
+- **Flexibility**: Supports nested structs, slices, maps, and custom tags
+
+### Basic Usage
+
+Define a struct with `json` and `agent` tags:
+
+```go
+type WeatherReport struct {
+    City        string  `json:"city" agent:"desc:City name;required:true"`
+    Temperature float64 `json:"temperature" agent:"desc:Temperature in Celsius;required:true;range:-50,60"`
+    Humidity    int     `json:"humidity" agent:"desc:Humidity percentage;required:true;range:0,100"`
+    Condition   string  `json:"condition" agent:"desc:Weather condition;enum:sunny,cloudy,rainy,snowy"`
+}
+
+// Use with React Agent
+response, err := agent.RunStructured[WeatherReport](reactAgent, ctx, "What's the weather in Tokyo?")
+fmt.Printf("City: %s\n", response.Output.City)
+fmt.Printf("Temperature: %.1f°C\n", response.Output.Temperature)
+
+// Use with Plan Agent
+response, plan, err := agent.RunStructuredWithPlan[WeatherReport](planningAgent, ctx, query)
+```
+
+### Agent Tags
+
+The `agent` tag supports these options:
+
+| Option | Description | Example |
+|--------|-------------|---------|
+| `desc` | Field description | `desc:User name` |
+| `required` | Whether field is required | `required:true` |
+| `default` | Default value | `default:Anonymous` |
+| `range` | Numeric range constraint | `range:0,150` |
+| `enum` | Allowed values (comma-separated) | `enum:sunny,cloudy,rainy` |
+
+#### Tag Format
+
+```
+agent:"desc:Description;required:true;default:value;range:min,max;enum:a,b,c"
+```
+
+### Supported Types
+
+| Go Type | JSON Type | Notes |
+|---------|-----------|-------|
+| `string` | string | - |
+| `int`, `int8-64`, `uint`, `uint8-64` | integer | - |
+| `float32`, `float64` | number | - |
+| `bool` | boolean | - |
+| `struct` | object | Recursive processing |
+| `slice`, `array` | array | With element type schema |
+| `map` | object | Key-value pairs |
+| `time.Time` | string | ISO 8601 format |
+
+### Advanced Examples
+
+#### Nested Structs
+
+```go
+type Address struct {
+    Street  string `json:"street" agent:"desc:Street address"`
+    City    string `json:"city" agent:"desc:City name;required:true"`
+    Country string `json:"country" agent:"desc:Country name;required:true"`
+}
+
+type Person struct {
+    Name    string  `json:"name" agent:"desc:Full name;required:true"`
+    Age     int     `json:"age" agent:"desc:Age in years;range:0,150"`
+    Address Address `json:"address" agent:"desc:Postal address"`
+}
+```
+
+#### Arrays and Collections
+
+```go
+type TravelPlan struct {
+    Destination string   `json:"destination" agent:"desc:Destination;required:true"`
+    Duration    int      `json:"duration" agent:"desc:Trip duration in days;range:1,30"`
+    Activities  []string `json:"activities" agent:"desc:List of activities"`
+    Tips        []string `json:"tips" agent:"desc:Travel tips"`
+}
+```
+
+### Configuration Options
+
+```go
+config := agent.DefaultConfig()
+config.Output = &agent.OutputConfig{
+    EnableStructuredOutput: true,  // Auto-enabled when using RunStructured
+    MaxNestingDepth:        5,     // Max nested struct depth (default: 5)
+    MaxParseRetries:        3,     // JSON parse retry attempts (default: 3)
+}
+```
+
+### API Reference
+
+#### React Agent Structured Output
+
+| Function | Description |
+|----------|-------------|
+| `RunStructured[T](agent, ctx, query)` | Run agent with structured output |
+| `RunStructuredWithCallback[T](agent, ctx, query, callback)` | Run with structured output and step callbacks |
+
+#### Plan Agent Structured Output
+
+| Function | Description |
+|----------|-------------|
+| `RunStructuredWithPlan[T](agent, ctx, query)` | Run with planning and structured output |
+
+### Response Type
+
+```go
+type StructuredResponse[T any] struct {
+    ReActResponse *ReActResponse  // Original response with thoughts
+    Output        *T             // Parsed struct output
+}
+```
+
+### Examples
+
+See [example/example_structured.go](example/example_structured.go) and [examples_planning/example_plan_structured.go](examples_planning/example_plan_structured.go) for complete working examples.
 
 ## 📦 Installation
 
@@ -589,7 +721,27 @@ export OPENAI_API_KEY="your-api-key"
 go run example.go
 ```
 
-### Example 2: Custom Tools
+### Example 2: Structured Output
+
+See [example/example_structured.go](example/example_structured.go) for a complete structured output example.
+
+```bash
+cd example
+export OPENAI_API_KEY="your-api-key"
+go run example_structured.go
+```
+
+### Example 3: Structured Planning
+
+See [examples_planning/example_plan_structured.go](examples_planning/example_plan_structured.go) for structured output with planning.
+
+```bash
+cd examples_planning
+export OPENAI_API_KEY="your-api-key"
+go run example_plan_structured.go
+```
+
+### Example 4: Custom Tools
 
 ```go
 // Define a custom tool
@@ -706,6 +858,21 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## 📝 CHANGELOG
 
 ### [Unreleased] - 2025-02-19
+
+#### Added
+- **Structured Output Feature**: User-defined struct output with automatic JSON schema generation
+  - `StructuredResponse[T]` generic type for type-safe structured outputs
+  - `RunStructured[T]()` function for React Agent structured output
+  - `RunStructuredWithCallback[T]()` for structured output with step monitoring
+  - `RunStructuredWithPlan[T]()` for Plan Agent structured output
+  - `OutputConfig` for configuring structured output behavior
+  - `StructParser` for parsing Go structs and generating JSON schemas
+  - `agent` tag support: `desc`, `required`, `default`, `range`, `enum`
+  - Support for nested structs, slices, maps, and all basic Go types
+
+#### Documentation
+- Added Structured Output Feature section to README with usage examples
+- Added structured output examples: `example/example_structured.go` and `examples_planning/example_plan_structured.go`
 
 #### Added
 - **Planning Feature**: Initial plan generation and adaptive re-planning capability

@@ -2,7 +2,9 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"reflect"
 	"strings"
 
 	"github.com/dreamzero-oxm/go-react-agent/llm"
@@ -147,11 +149,22 @@ func (a *ReActAgent) SetSystemPrompt(prompt string) {
 }
 
 func (a *ReActAgent) GetSystemPrompt() string {
-	if a.systemPrompt != "" {
-		return a.injectToolsIntoPrompt(a.systemPrompt)
+	basePrompt := a.getBaseSystemPrompt()
+
+	// Inject structured output instructions if configured
+	if a.config.Output != nil && a.config.Output.EnableStructuredOutput && a.config.Output.OutputSchema != "" {
+		basePrompt = a.injectOutputFormat(basePrompt)
 	}
 
-	return a.injectToolsIntoPrompt(`You are an intelligent assistant capable of reasoning and acting to solve complex tasks using available tools. Follow the ReAct (Reasoning + Acting) pattern to break down problems into manageable steps.
+	return a.injectToolsIntoPrompt(basePrompt)
+}
+
+func (a *ReActAgent) getBaseSystemPrompt() string {
+	if a.systemPrompt != "" {
+		return a.systemPrompt
+	}
+
+	return `You are an intelligent assistant capable of reasoning and acting to solve complex tasks using available tools. Follow the ReAct (Reasoning + Acting) pattern to break down problems into manageable steps.
 
 ## ReAct Pattern
 
@@ -279,7 +292,7 @@ Available tools:\n
 5. **Handle** errors gracefully and try alternative approaches
 6. **Avoid** unnecessary tool calls when general knowledge suffices
 
-Remember: Your goal is to be helpful, accurate, and efficient. Always respond with valid JSON.`)
+Remember: Your goal is to be helpful, accurate, and efficient. Always respond with valid JSON.`
 }
 
 func (a *ReActAgent) injectToolsIntoPrompt(prompt string) string {
@@ -294,6 +307,88 @@ func (a *ReActAgent) injectToolsIntoPrompt(prompt string) string {
 	}
 
 	return fmt.Sprintf("%s\n\n## Available Tools\n\n%s", prompt, toolsSchema)
+}
+
+func (a *ReActAgent) injectOutputFormat(prompt string) string {
+	if a.config.Output == nil || a.config.Output.OutputSchema == "" {
+		return prompt
+	}
+
+	instructions := fmt.Sprintf(`
+
+## Structured Output Format
+
+CRITICAL: Your final response MUST be valid JSON ONLY - no additional text, explanations, or markdown formatting.
+
+### Response Structure
+Your response must follow this exact structure:
+{
+  "thoughts": [{"content": "string"}],
+  "action": {"name": "tool_name", "input": {...}} | null,
+  "answer": "JSON_STRING",
+  "done": boolean
+}
+
+### Answer Field Schema
+The content of the "answer" field (when parsed as JSON) must match this schema:
+
+%s
+
+### Response Requirements
+
+1. **JSON ONLY**: Respond with valid JSON only - no introductory text, no explanations, no markdown code blocks
+2. **Fixed Response Structure**: Your response must always contain the four top-level fields: thoughts, action, answer, done
+3. **Answer Field Compliance**: When "done" is true, the "answer" field must contain a JSON string that, when parsed, matches the schema above
+4. **Field Requirements**:
+   - "thoughts": Array of thought objects with "content" field (required)
+   - "action": Tool action object or null (mutually exclusive with "answer" - only one can be set)
+   - "answer": JSON string containing your structured output (required when "done" is true, empty string otherwise)
+   - "done": Boolean flag (required - set to true only when task is complete)
+
+5. **Output Format**:
+   - Set "action" with tool name and input when using a tool (set "answer" to empty string)
+   - Set "answer" to a JSON string (escaped properly) when providing final structured output (set "action" to null)
+   - Set "done" to "true" only when task is complete
+
+### Example Responses
+
+**When using a tool**:
+{
+  "thoughts": [{"content": "I need to search for information"}],
+  "action": {
+    "name": "search",
+    "input": {"query": "search term"}
+  },
+  "answer": "",
+  "done": false
+}
+
+**When providing final answer**:
+{
+  "thoughts": [{"content": "I have gathered all information"}],
+  "action": null,
+  "answer": "{\"your_field\": \"value\", \"another_field\": 123}",
+  "done": true
+}
+
+### Important Notes
+
+- The "answer" field must contain a properly escaped JSON string that can be unmarshaled into the target structure matching the provided schema
+- Never include markdown formatting like triple backticks around your response
+- Never include explanatory text before or after the JSON
+- Ensure all JSON is valid and properly formatted
+`, a.config.Output.OutputSchema)
+
+	// Replace existing answer format section or append
+	if strings.Contains(prompt, "## Response Format") {
+		// Find and replace the answer format section
+		parts := strings.Split(prompt, "## Response Format")
+		if len(parts) >= 2 {
+			return parts[0] + "## Response Format" + instructions
+		}
+	}
+
+	return prompt + instructions
 }
 
 func (a *ReActAgent) RegisterTool(tool interface{}) error {
@@ -462,6 +557,61 @@ func (a *ReActAgent) RunWithCallback(ctx context.Context, query string, callback
 
 func (a *ReActAgent) parseResponse(response string) (*ReActResponse, error) {
 	return a.parser.Parse(response)
+}
+
+// RunStructured runs the agent and returns a struct-based response
+func RunStructured[T any](agent *ReActAgent, ctx context.Context, query string) (*StructuredResponse[T], error) {
+	return RunStructuredWithCallback[T](agent, ctx, query, nil)
+}
+
+// RunStructuredWithCallback runs the agent with structured output and callback support
+func RunStructuredWithCallback[T any](agent *ReActAgent, ctx context.Context, query string, callback func(step *Step)) (*StructuredResponse[T], error) {
+	// Get the type of T
+	var zeroT T
+	outputType := reflect.TypeOf(zeroT)
+	if outputType.Kind() == reflect.Ptr {
+		outputType = outputType.Elem()
+	}
+
+	// Create struct parser and generate schema
+	parser := NewStructParser()
+	if agent.config.Output != nil && agent.config.Output.MaxNestingDepth > 0 {
+		parser.SetMaxNestingDepth(agent.config.Output.MaxNestingDepth)
+	}
+
+	schema, err := parser.ParseStruct(outputType)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse output struct type: %w", err)
+	}
+
+	// Store output schema in config for prompt injection
+	if agent.config.Output == nil {
+		agent.config.Output = &OutputConfig{}
+	}
+	agent.config.Output.EnableStructuredOutput = true
+	agent.config.Output.OutputType = outputType
+	agent.config.Output.OutputSchema = parser.ToJSONSchema(schema)
+
+	// Run the agent with standard callback
+	resp, err := agent.RunWithCallback(ctx, query, callback)
+	if err != nil {
+		return nil, err
+	}
+
+	// Parse the answer into the target struct
+	result := &StructuredResponse[T]{
+		ReActResponse: resp,
+	}
+
+	if resp.Done && resp.Answer != "" {
+		var output T
+		if err := json.Unmarshal([]byte(resp.Answer), &output); err != nil {
+			return nil, fmt.Errorf("failed to parse structured answer: %w", err)
+		}
+		result.Output = &output
+	}
+
+	return result, nil
 }
 
 func (a *ReActAgent) Stream(ctx context.Context, query string, callback func(chunk string)) error {

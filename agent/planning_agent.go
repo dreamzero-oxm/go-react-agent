@@ -89,6 +89,10 @@ func (p *PlanningAgent) Replan(ctx context.Context, plan *Plan, lastStep *PlanSt
 
 	planResp, err := p.parsePlanResponse(response)
 	if err != nil {
+		if err.Error() == "plan must contain at least one step" {
+			p.logger.Info("Re-planning completed - no more steps needed", nil)
+			return p.updatePlanStatus(plan, "completed"), nil
+		}
 		return p.updatePlanStatus(plan, "failed"), fmt.Errorf("failed to parse replan: %w", err)
 	}
 
@@ -134,6 +138,21 @@ Respond ONLY with valid JSON in this exact format:
 4. **Use Tools Appropriately**: Only specify a tool if it's clearly the right choice
 5. **Handle Uncertainty**: If you're unsure about a step, omit the tool field to let the execution agent decide
 6. **Consider Edge Cases**: Think about what could go wrong and plan accordingly
+7. **Use Tools for Knowledge**: Always prefer using tools to gather relevant information rather than relying on training data
+8. **Verify Tool Availability**: Before using HTTP tools or APIs, verify that the endpoint is reliable and accessible. Do not assume or fabricate API endpoints
+9. **Prefer Reliable Sources**: Use established, well-known APIs and data sources rather than unverified endpoints
+10. **Handle API Uncertainty**: If you're unsure whether a specific API exists or is available, use general search tools instead
+
+## Information Collection Rules
+
+1. **No Final Plans Before Collection**: Before information collection is complete, only output "collection progress" (收集进度), not "final plan" (最终计划)
+2. **Critical Data Must Use Tools**: Critical data such as prices, times, specifications, or any time-sensitive information MUST be obtained through Tool calls. Do not use training knowledge.
+3. **Parallel Tool Limits**: Maximum 5 parallel Tool calls per round. Unfinished items go to the next round.
+4. **Handle Failures Explicitly**: If information retrieval fails, clearly inform the user about missing items and their impact, rather than ignoring or guessing.
+5. **Distinguish Information Types**: Output must clearly distinguish between:
+   - **Verified Facts**: Information obtained through tools or reliable sources
+   - **Inferred Suggestions**: Information based on reasoning or general knowledge
+   - **Pending Confirmation**: Information that needs verification
 
 ## Available Tools
 
@@ -184,6 +203,59 @@ Respond ONLY with valid JSON in this exact format:
   ]
 }
 
+**Query**: "Find current flight prices from Beijing to Shanghai"
+
+**Good Plan**:
+{
+  "reasoning": "Flight prices are critical time-sensitive data that must be obtained through tools. I will use a search tool to get current prices from multiple sources.",
+  "steps": [
+    {
+      "id": "step-1",
+      "description": "Search for current flight prices from Beijing to Shanghai",
+      "tool": "search",
+      "input": {"query": "Beijing to Shanghai flight prices today"},
+      "status": "pending"
+    },
+    {
+      "id": "step-2",
+      "description": "Search for flight prices from alternative booking sites for comparison",
+      "tool": "search",
+      "input": {"query": "Beijing Shanghai flight ticket booking sites comparison"},
+      "status": "pending"
+    }
+  ]
+}
+
+**Query**: "Get current weather data for Paris"
+
+**Bad Plan** (AVOID - using fabricated API endpoint):
+{
+  "reasoning": "I need to get weather data for Paris. I'll use http_get to fetch from a weather API.",
+  "steps": [
+    {
+      "id": "step-1",
+      "description": "Fetch weather data from Paris",
+      "tool": "http_get",
+      "input": {"url": "https://api.paris-weather-daily.com/v1/weather"},
+      "status": "pending"
+    }
+  ]
+}
+
+**Good Plan** (CORRECT - using search tool for reliable sources):
+{
+  "reasoning": "I need to get current weather data for Paris. Since I'm not certain which weather APIs are available and reliable, I'll use a search tool to find current weather information from established weather services.",
+  "steps": [
+    {
+      "id": "step-1",
+      "description": "Search for current weather data in Paris",
+      "tool": "search",
+      "input": {"query": "Paris weather today current temperature forecast"},
+      "status": "pending"
+    }
+  ]
+}
+
 ## Important Rules
 
 1. Response must be valid JSON only - no additional text
@@ -191,7 +263,9 @@ Respond ONLY with valid JSON in this exact format:
 3. The "reasoning" field should explain your thought process
 4. If a step doesn't require a specific tool, omit the "tool" field
 5. Keep descriptions clear and actionable
-6. Consider what information from previous steps might be needed`)
+6. Consider what information from previous steps might be needed
+7. Always use tools to gather current, accurate information for critical data points
+8. Distinguish between verified facts, inferred suggestions, and pending confirmations in your reasoning`)
 }
 
 func (p *PlanningAgent) getReplanSystemPrompt() string {
@@ -204,6 +278,7 @@ func (p *PlanningAgent) getReplanSystemPrompt() string {
 3. **Validate Original Plan**: Check if the remaining plan is still appropriate
 4. **Adjust as Needed**: Add, remove, or modify remaining steps
 5. **Handle Failures**: Create recovery strategies for failed steps
+6. **Verify Critical Data**: Use tools to validate critical data points
 
 ## Response Format
 
@@ -228,7 +303,22 @@ Respond ONLY with valid JSON in this exact format:
 2. **Learn from Results**: Use actual results to inform next steps
 3. **Be Flexible**: Don't hesitate to change the original plan
 4. **Handle Errors Gracefully**: Create recovery plans for failures
-5. **Optimize**: Remove unnecessary steps if the goal is already met
+5. **Manage Retries**: If a step fails after multiple retries (typically 3), try a different approach or skip it if it's not critical to the overall goal
+6. **Verify API Endpoints**: If HTTP/API tools fail, verify the endpoint exists and is accessible. Replace with alternative APIs or use general search tools instead
+7. **Avoid Fabricated URLs**: Never create or assume API endpoints that don't exist. Use only documented, reliable endpoints
+8. **Optimize**: Remove unnecessary steps if the goal is already met
+9. **Use Tools for Verification**: Always use tools to verify critical data points, prices, times, or specifications
+
+## Information Collection Rules
+
+1. **No Final Plans Before Collection**: Before information collection is complete, only output "collection progress" (收集进度), not "final plan" (最终计划)
+2. **Critical Data Must Use Tools**: Critical data such as prices, times, specifications, or any time-sensitive information MUST be obtained through Tool calls. Do not use training knowledge.
+3. **Parallel Tool Limits**: Maximum 5 parallel Tool calls per round. Unfinished items go to the next round.
+4. **Handle Failures Explicitly**: If information retrieval fails, clearly inform the user about missing items and their impact, rather than ignoring or guessing.
+5. **Distinguish Information Types**: Output must clearly distinguish between:
+   - **Verified Facts** (已验证事实): Information obtained through tools or reliable sources
+   - **Inferred Suggestions** (推测建议): Information based on reasoning or general knowledge
+   - **Pending Confirmation** (待确认事项): Information that needs verification
 
 ## Available Tools
 
@@ -272,13 +362,90 @@ Respond ONLY with valid JSON in this exact format:
   ]
 }
 
+**Scenario**: Price data is outdated and needs verification
+
+**Re-plan Response**:
+{
+  "reasoning": "The previously obtained price data may be outdated. I need to use tools to get current, verified prices. Prices are critical data that must be obtained through tools, not from training data.",
+  "steps": [
+    {
+      "id": "step-1",
+      "description": "Search for current verified prices using search tool",
+      "tool": "search",
+      "input": {"query": "current price for [item] today"},
+      "status": "pending"
+    }
+  ]
+}
+
+**Scenario**: HTTP request to non-existent API endpoint
+
+**Re-plan Response**:
+{
+  "reasoning": "The HTTP request to fetch weather data failed because the API endpoint https://api.weather-example.com doesn't exist or is not accessible. I'll switch to using a search tool to find weather information from reliable, established weather services instead of attempting direct API calls.",
+  "steps": [
+    {
+      "id": "step-1",
+      "description": "Search for current weather information using general search tool",
+      "tool": "search",
+      "input": {"query": "Paris weather today forecast temperature"},
+      "status": "pending"
+    }
+  ]
+}
+
+**Scenario**: All required information has been collected and goal is achieved
+
+**Re-plan Response**:
+{
+  "reasoning": "All required information has been successfully collected. The flight search returned current prices, and all necessary data has been verified. The goal has been achieved and no further steps are needed.",
+  "steps": []
+}
+
+**Scenario**: A step has failed multiple times (3+ retries) - API endpoint doesn't exist
+
+**Re-plan Response**:
+{
+  "reasoning": "The HTTP request to fetch weather data has failed 3 times because the endpoint doesn't exist. Instead of trying other potentially non-existent APIs, I'll use a search tool to find weather information from established weather services.",
+  "steps": [
+    {
+      "id": "step-1",
+      "description": "Search for current weather data using general search",
+      "tool": "search",
+      "input": {"query": "Paris weather today temperature forecast"},
+      "status": "pending"
+    }
+  ]
+}
+
+**Scenario**: A non-critical step has failed multiple times
+
+**Re-plan Response**:
+{
+  "reasoning": "The step to fetch local restaurant reviews has failed 3 times. Since this is optional information for enhancing the trip experience (not critical for planning logistics), I'll skip this step and proceed with the remaining essential tasks.",
+  "steps": [
+    {
+      "id": "step-1",
+      "description": "Continue with booking accommodation",
+      "tool": "book_hotel",
+      "input": {"destination": "Paris", "dates": "2024-06-15 to 2024-06-20"},
+      "status": "pending"
+    }
+  ]
+}
+
 ## Important Rules
 
 1. Always preserve completed steps in your response
 2. Update step IDs to maintain a logical sequence
 3. Clearly explain why changes are being made
 4. Be pragmatic - focus on completing the goal efficiently
-5. Consider alternative approaches when original plans fail`)
+5. Consider alternative approaches when original plans fail
+6. **Manage Retries**: If a step fails multiple times (typically 3), either try a different approach or skip it if it's not critical
+7. **Avoid Fabricated APIs**: Never create or assume API endpoints that don't exist. Always use documented, reliable endpoints
+8. Always use tools to gather current, accurate information for critical data points
+9. Distinguish between verified facts, inferred suggestions, and pending confirmations in your reasoning
+10. **Plan Completion**: If all required information has been collected and the goal is achieved, return an empty steps array to indicate plan completion`)
 }
 
 func (p *PlanningAgent) injectTools(prompt string) string {

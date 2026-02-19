@@ -26,3 +26,9 @@ type ReActResponse struct {
 	Answer   string    `json:"answer,omitempty"`
 	Done     bool      `json:"done"`
 }
+
+// StructuredResponse 包装结构化输出结果
+type StructuredResponse[T any] struct {
+	ReActResponse *ReActResponse
+	Output        *T // 解析后的结构体输出
+}

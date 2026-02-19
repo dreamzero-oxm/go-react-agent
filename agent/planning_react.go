@@ -2,7 +2,9 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"reflect"
 	"strings"
 
 	"github.com/dreamzero-oxm/go-react-agent/llm"
@@ -197,7 +199,22 @@ func (a *ReActAgentWithPlanning) executeWithPlan(ctx context.Context, plan *Plan
 		}, nil
 	}
 
-	parsed, _ := a.parseResponse(response)
+	if response == "" {
+		return &ReActResponse{
+			Thoughts: thoughts,
+			Answer:   fmt.Sprintf("All steps completed. %s", a.formatPlanResults(plan)),
+			Done:     true,
+		}, nil
+	}
+
+	parsed, parseErr := a.parseResponse(response)
+	if parsed == nil {
+		return &ReActResponse{
+			Thoughts: thoughts,
+			Answer:   fmt.Sprintf("All steps completed. %s", a.formatPlanResults(plan)),
+			Done:     true,
+		}, parseErr
+	}
 	parsed.Thoughts = append(thoughts, parsed.Thoughts...)
 
 	return parsed, nil
@@ -221,6 +238,10 @@ func (a *ReActAgentWithPlanning) executeWithLLM(ctx context.Context, messages []
 	parsed, err := a.parseResponse(response)
 	if err != nil {
 		return response, nil
+	}
+
+	if parsed == nil {
+		return "Step completed", nil
 	}
 
 	if parsed.Action != nil {
@@ -258,4 +279,54 @@ func (a *ReActAgentWithPlanning) findFirstPendingStep(plan *Plan) int {
 		}
 	}
 	return -1
+}
+
+// RunStructuredWithPlan executes the query with planning and structured output
+func RunStructuredWithPlan[T any](agent *ReActAgentWithPlanning, ctx context.Context, query string) (*StructuredResponse[T], *Plan, error) {
+	// Get the type of T
+	var zeroT T
+	outputType := reflect.TypeOf(zeroT)
+	if outputType.Kind() == reflect.Ptr {
+		outputType = outputType.Elem()
+	}
+
+	// Create struct parser and generate schema
+	parser := NewStructParser()
+	if agent.config.Output != nil && agent.config.Output.MaxNestingDepth > 0 {
+		parser.SetMaxNestingDepth(agent.config.Output.MaxNestingDepth)
+	}
+
+	schema, err := parser.ParseStruct(outputType)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to parse output struct type: %w", err)
+	}
+
+	// Store output schema in config for prompt injection
+	if agent.config.Output == nil {
+		agent.config.Output = &OutputConfig{}
+	}
+	agent.config.Output.EnableStructuredOutput = true
+	agent.config.Output.OutputType = outputType
+	agent.config.Output.OutputSchema = parser.ToJSONSchema(schema)
+
+	// Run with planning
+	response, plan, err := agent.RunWithPlan(ctx, query)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// Parse the answer into the target struct
+	result := &StructuredResponse[T]{
+		ReActResponse: response,
+	}
+
+	if response.Done && response.Answer != "" {
+		var output T
+		if err := json.Unmarshal([]byte(response.Answer), &output); err != nil {
+			return nil, nil, fmt.Errorf("failed to parse structured answer: %w", err)
+		}
+		result.Output = &output
+	}
+
+	return result, plan, nil
 }
