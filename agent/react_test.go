@@ -419,12 +419,16 @@ func TestDefaultConfig(t *testing.T) {
 		t.Errorf("Expected MaxIterations 10, got %d", config.MaxIterations)
 	}
 
+	if config.Timeout != 10*time.Minute {
+		t.Errorf("Expected Timeout 10m, got %v", config.Timeout)
+	}
+
 	if config.Temperature != 0.7 {
 		t.Errorf("Expected Temperature 0.7, got %f", config.Temperature)
 	}
 
-	if config.MaxTokens != 2000 {
-		t.Errorf("Expected MaxTokens 2000, got %d", config.MaxTokens)
+	if config.MaxTokens != 4096 {
+		t.Errorf("Expected MaxTokens 4096, got %d", config.MaxTokens)
 	}
 }
 

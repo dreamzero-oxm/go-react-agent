@@ -14,9 +14,9 @@ type Config struct {
 func DefaultConfig() *Config {
 	return &Config{
 		MaxIterations: 10,
-		Timeout:       5 * time.Minute,
+		Timeout:       10 * time.Minute,
 		Temperature:   0.7,
-		MaxTokens:     2000,
+		MaxTokens:     4096,
 		Parser:        NewJSONParser(),
 	}
 }
