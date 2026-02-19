@@ -5,6 +5,7 @@
 ![Go](https://img.shields.io/badge/Go-1.21+-00ADD8?style=flat-square&logo=go)
 ![License](https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square)
 ![Go Report](https://goreportcard.com/badge/github.com/dreamzero-oxm/go-react-agent?style=flat-square)
+![Go Report](https://goreportcard.com/badge/github.com/dreamzero-oxm/go-react-agent?style=flat-square)
 ![Tests](https://img.shields.io/badge/tests-passing-brightgreen.svg?style=flat-square)
 
 **A high-performance, production-ready ReAct Agent framework for building intelligent AI agents in Go**
@@ -54,11 +55,39 @@ The agent uses structured JSON responses for reliable parsing. LLMs respond with
 
 The parser automatically handles markdown code blocks (` ```json ... ` ` `) and validates responses for correctness.
 
+### 📋 JSON Response Format
+
+The agent uses structured JSON responses for reliable parsing. LLMs respond with this format:
+
+**For tool actions:**
+```json
+{
+  "thoughts": [{"content": "I need to use a tool"}],
+  "action": {"name": "tool_name", "input": {"param": "value"}},
+  "answer": null,
+  "done": false
+}
+```
+
+**For final answers:**
+```json
+{
+  "thoughts": [{"content": "I have enough information"}],
+  "action": null,
+  "answer": "Final answer here",
+  "done": true
+}
+```
+
+The parser automatically handles markdown code blocks (` ```json ... ` ` `) and validates responses for correctness.
+
 ## ✨ Features
 
 - **🧠 Complete ReAct Architecture** - Full implementation of the Thought-Action-Observation loop
 - **📋 JSON-Based Parsing** - Structured JSON responses with automatic validation and markdown handling
+- **📋 JSON-Based Parsing** - Structured JSON responses with automatic validation and markdown handling
 - **🔌 Multi-LLM Support** - Support for 10+ LLM providers including OpenAI, Anthropic, Google Gemini, Cohere, Mistral AI, AWS Bedrock, 阿里云通义千问, 百度文心一言, Ollama, and custom providers
+- **🔧 Pluggable Parsers** - Custom response parsers via `ResponseParser` interface for specialized formats
 - **🔧 Pluggable Parsers** - Custom response parsers via `ResponseParser` interface for specialized formats
 - **🌐 Comprehensive Coverage** - Global LLM support including Chinese and international providers
 - **🛠️ Tool System** - Extensible tool registration with built-in tools and easy custom tool creation
@@ -71,10 +100,77 @@ The parser automatically handles markdown code blocks (` ```json ... ` ` `) and 
 - **📊 Callback System** - Monitor agent execution step-by-step with callbacks
 - **🏪 Factory Pattern** - Unified LLM creation via factory interface
 - **🌍 Local & Cloud** - Support for both local models (Ollama) and cloud APIs
+- **🎯 Planning Feature** - Intelligent task decomposition and adaptive re-planning
+
+## 🎯 Planning Feature
+
+The planning feature enables intelligent task decomposition and adaptive execution for complex multi-step tasks.
+
+### How Planning Works
+
+1. **Initial Planning**: The agent analyzes the query and creates a structured plan before execution
+2. **Step Execution**: Executes planned steps sequentially while tracking progress
+3. **Adaptive Re-planning**: After each step (or every N steps), the agent updates the plan based on results
+
+### Enabling Planning
+
+```go
+// Create agent with planning enabled
+planConfig := agent.DefaultPlanConfig()
+planConfig.Enabled = true        // Enable planning
+planConfig.ReplanEnabled = true  // Enable re-planning
+planConfig.ReplanEvery = 1       // Re-plan after each step
+
+config := agent.DefaultConfig()
+config.PlanConfig = planConfig
+
+planningAgent := agent.NewReActAgentWithPlanning(llm, config, planConfig, log)
+planningAgent.InitializePlanning(llm)
+
+// Register tools
+tools.RegisterBuiltinToolsTo(planningAgent)
+
+// Run with planning
+response, plan, err := planningAgent.RunWithPlan(ctx, query)
+if err != nil {
+    panic(err)
+}
+
+fmt.Printf("Plan:\n")
+for _, step := range plan.Steps {
+    fmt.Printf("  [%s] %s\n", step.Status, step.Description)
+}
+fmt.Printf("Answer: %s\n", response.Answer)
+```
+
+### Planning Configuration Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `Enabled` | bool | false | Enable planning feature (opt-in) |
+| `ReplanEnabled` | bool | true | Enable adaptive re-planning |
+| `ReplanEvery` | int | 1 | Re-plan every N steps |
+| `SystemPrompt` | string | "" | Custom planning system prompt |
+
+### Backward Compatibility
+
+The planning feature is completely opt-in. Existing code continues to work without changes:
+
+```go
+// Standard ReAct agent (no planning)
+agent := agent.NewReActAgent(llm, config, log)
+response, err := agent.Run(ctx, query) // Works as before
+
+// Or with planning disabled
+planConfig := agent.DefaultPlanConfig() // Enabled defaults to false
+planningAgent := agent.NewReActAgentWithPlanning(llm, config, planConfig, log)
+response, err := planningAgent.Run(ctx, query) // Falls back to standard execution
+```
 
 ## 📦 Installation
 
 ```bash
+go get github.com/dreamzero-oxm/go-react-agent
 go get github.com/dreamzero-oxm/go-react-agent
 ```
 
@@ -90,6 +186,10 @@ import (
     "fmt"
     "os"
 
+    "github.com/dreamzero-oxm/go-react-agent/agent"
+    "github.com/dreamzero-oxm/go-react-agent/logger"
+    "github.com/dreamzero-oxm/go-react-agent/llm"
+    "github.com/dreamzero-oxm/go-react-agent/tools"
     "github.com/dreamzero-oxm/go-react-agent/agent"
     "github.com/dreamzero-oxm/go-react-agent/logger"
     "github.com/dreamzero-oxm/go-react-agent/llm"
@@ -326,10 +426,12 @@ config := &agent.Config{
     MaxIterations: 10,
     Timeout:       5 * time.Minute,
     Parser:        agent.NewJSONParser(),  // Use default JSON parser
+    Parser:        agent.NewJSONParser(),  // Use default JSON parser
 }
 reactAgent := agent.NewReActAgent(llm, config, log)
 ```
 
+Or use defaults (includes JSON parser):
 Or use defaults (includes JSON parser):
 
 ```go
@@ -343,6 +445,32 @@ config := agent.DefaultConfig()
 - `LevelWarn` - Warning messages
 - `LevelError` - Error messages only
 - `LevelFatal` - Fatal errors that cause program exit
+
+#### Custom Response Parsers
+
+Implement the `ResponseParser` interface for custom response formats:
+
+```go
+// Define a custom parser
+type XMLParser struct{}
+
+func (x *XMLParser) Parse(response string) (*agent.ReActResponse, error) {
+    // Your custom parsing logic
+    // For example: parse XML format instead of JSON
+    // ...
+    return &agent.ReActResponse{}, nil
+}
+
+// Use the custom parser
+config := agent.DefaultConfig()
+config.Parser = &XMLParser{}
+reactAgent := agent.NewReActAgent(llm, config, log)
+```
+
+This is useful when:
+- Using LLMs that don't support JSON output well
+- Working with specialized response formats
+- Implementing custom validation or preprocessing
 
 #### Custom Response Parsers
 
@@ -575,8 +703,41 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - **Discussions**: Use GitHub Discussions for questions and ideas
 - **Documentation**: Check inline code documentation for detailed API info
 
+## 📝 CHANGELOG
+
+### [Unreleased] - 2025-02-19
+
+#### Added
+- **Planning Feature**: Initial plan generation and adaptive re-planning capability
+  - `ReActAgentWithPlanning` for plan-enabled agents
+  - `Plan` and `PlanStep` types for structured plan representation
+  - `PlanningAgent` for plan creation and updates
+  - `PlanConfig` for planning behavior configuration
+  - `RunWithPlan()` method returning both response and plan
+  - `GetPlan()` method to retrieve current execution plan
+
+#### Documentation
+- Added Planning Feature section to README with usage examples
+- Added CHANGELOG section to track feature additions
+
+### [1.0.0] - Initial Release
+- Core ReAct agent architecture
+- Multi-LLM support (OpenAI, Anthropic, Gemini, etc.)
+- JSON-based response parsing with markdown handling
+- Built-in tools (calculate, http_get, read_file, write_file, echo, search_files)
+- Callback system for monitoring
+- Streaming support
+
 ## 🔗 Links
 
+- **Issues**: Open an issue on GitHub for bugs or feature requests
+- **Discussions**: Use GitHub Discussions for questions and ideas
+- **Documentation**: Check inline code documentation for detailed API info
+
+## 🔗 Links
+
+- [GitHub Repository](https://github.com/dreamzero-oxm/go-react-agent)
+- [API Documentation](https://pkg.go.dev/github.com/dreamzero-oxm/go-react-agent)
 - [GitHub Repository](https://github.com/dreamzero-oxm/go-react-agent)
 - [API Documentation](https://pkg.go.dev/github.com/dreamzero-oxm/go-react-agent)
 - [Examples](./example/)

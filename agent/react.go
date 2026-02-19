@@ -125,21 +125,21 @@ func (s *simpleToolRegistry) Execute(name string, input map[string]interface{}) 
 }
 
 func (s *simpleToolRegistry) GetToolsSchema() string {
-	schema := ""
+	var builder strings.Builder
 	for name, tool := range s.tools {
-		schema += fmt.Sprintf("- %s: %s\n", name, tool.Description)
+		fmt.Fprintf(&builder, "- %s: %s\n", name, tool.Description)
 		if len(tool.Parameters) > 0 {
-			schema += "  Parameters:\n"
+			builder.WriteString("  Parameters:\n")
 			for paramName, param := range tool.Parameters {
 				required := ""
 				if param.Required {
 					required = " (required)"
 				}
-				schema += fmt.Sprintf("    - %s (%s)%s: %s\n", paramName, param.Type, required, param.Description)
+				fmt.Fprintf(&builder, "    - %s (%s)%s: %s\n", paramName, param.Type, required, param.Description)
 			}
 		}
 	}
-	return schema
+	return builder.String()
 }
 
 func (a *ReActAgent) SetSystemPrompt(prompt string) {
@@ -293,7 +293,7 @@ func (a *ReActAgent) injectToolsIntoPrompt(prompt string) string {
 		return strings.ReplaceAll(prompt, "{{TOOLS}}", toolsSchema)
 	}
 
-	return prompt + "\n\n## Available Tools\n\n" + toolsSchema
+	return fmt.Sprintf("%s\n\n## Available Tools\n\n%s", prompt, toolsSchema)
 }
 
 func (a *ReActAgent) RegisterTool(tool interface{}) error {
@@ -343,20 +343,29 @@ func (a *ReActAgent) RunWithCallback(ctx context.Context, query string, callback
 	steps := make([]Step, 0)
 	thoughts := make([]Thought, 0)
 
-	timeoutCtx, cancel := context.WithTimeout(ctx, a.config.Timeout)
-	defer cancel()
+	var timeoutCtx context.Context
+	var cancel context.CancelFunc
+
+	if a.config.Timeout > 0 {
+		timeoutCtx, cancel = context.WithTimeout(ctx, a.config.Timeout)
+		defer cancel()
+	} else {
+		timeoutCtx = ctx
+	}
 
 	for iteration := 0; iteration < a.config.MaxIterations; iteration++ {
-		select {
-		case <-timeoutCtx.Done():
-			a.logger.Warn("Agent timeout reached", map[string]interface{}{
-				"iteration": iteration,
-			})
-			return &ReActResponse{
-				Thoughts: thoughts,
-				Done:     false,
-			}, fmt.Errorf("agent timeout after %v", a.config.Timeout)
-		default:
+		if a.config.Timeout > 0 {
+			select {
+			case <-timeoutCtx.Done():
+				a.logger.Warn("Agent timeout reached", map[string]interface{}{
+					"iteration": iteration,
+				})
+				return &ReActResponse{
+					Thoughts: thoughts,
+					Done:     false,
+				}, fmt.Errorf("agent timeout after %v", a.config.Timeout)
+			default:
+			}
 		}
 
 		a.logger.Debug("Iteration start", map[string]interface{}{
@@ -467,14 +476,23 @@ func (a *ReActAgent) Stream(ctx context.Context, query string, callback func(chu
 		},
 	}
 
-	timeoutCtx, cancel := context.WithTimeout(ctx, a.config.Timeout)
-	defer cancel()
+	var timeoutCtx context.Context
+	var cancel context.CancelFunc
+
+	if a.config.Timeout > 0 {
+		timeoutCtx, cancel = context.WithTimeout(ctx, a.config.Timeout)
+		defer cancel()
+	} else {
+		timeoutCtx = ctx
+	}
 
 	for iteration := 0; iteration < a.config.MaxIterations; iteration++ {
-		select {
-		case <-timeoutCtx.Done():
-			return fmt.Errorf("agent timeout after %v", a.config.Timeout)
-		default:
+		if a.config.Timeout > 0 {
+			select {
+			case <-timeoutCtx.Done():
+				return fmt.Errorf("agent timeout after %v", a.config.Timeout)
+			default:
+			}
 		}
 
 		err := a.llm.Stream(messages, func(chunk string) {
