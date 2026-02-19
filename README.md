@@ -5,6 +5,7 @@
 ![Go](https://img.shields.io/badge/Go-1.21+-00ADD8?style=flat-square&logo=go)
 ![License](https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square)
 ![Go Report](https://goreportcard.com/badge/github.com/dreamzero-oxm/go-react-agent?style=flat-square)
+![Go Report](https://goreportcard.com/badge/github.com/dreamzero-oxm/go-react-agent?style=flat-square)
 ![Tests](https://img.shields.io/badge/tests-passing-brightgreen.svg?style=flat-square)
 
 **A high-performance, production-ready ReAct Agent framework for building intelligent AI agents in Go**
@@ -54,11 +55,39 @@ The agent uses structured JSON responses for reliable parsing. LLMs respond with
 
 The parser automatically handles markdown code blocks (` ```json ... ` ` `) and validates responses for correctness.
 
+### 📋 JSON Response Format
+
+The agent uses structured JSON responses for reliable parsing. LLMs respond with this format:
+
+**For tool actions:**
+```json
+{
+  "thoughts": [{"content": "I need to use a tool"}],
+  "action": {"name": "tool_name", "input": {"param": "value"}},
+  "answer": null,
+  "done": false
+}
+```
+
+**For final answers:**
+```json
+{
+  "thoughts": [{"content": "I have enough information"}],
+  "action": null,
+  "answer": "Final answer here",
+  "done": true
+}
+```
+
+The parser automatically handles markdown code blocks (` ```json ... ` ` `) and validates responses for correctness.
+
 ## ✨ Features
 
 - **🧠 Complete ReAct Architecture** - Full implementation of the Thought-Action-Observation loop
 - **📋 JSON-Based Parsing** - Structured JSON responses with automatic validation and markdown handling
+- **📋 JSON-Based Parsing** - Structured JSON responses with automatic validation and markdown handling
 - **🔌 Multi-LLM Support** - Support for 10+ LLM providers including OpenAI, Anthropic, Google Gemini, Cohere, Mistral AI, AWS Bedrock, 阿里云通义千问, 百度文心一言, Ollama, and custom providers
+- **🔧 Pluggable Parsers** - Custom response parsers via `ResponseParser` interface for specialized formats
 - **🔧 Pluggable Parsers** - Custom response parsers via `ResponseParser` interface for specialized formats
 - **🌐 Comprehensive Coverage** - Global LLM support including Chinese and international providers
 - **🛠️ Tool System** - Extensible tool registration with built-in tools and easy custom tool creation
@@ -142,6 +171,7 @@ response, err := planningAgent.Run(ctx, query) // Falls back to standard executi
 
 ```bash
 go get github.com/dreamzero-oxm/go-react-agent
+go get github.com/dreamzero-oxm/go-react-agent
 ```
 
 ## 🚀 Quick Start
@@ -156,6 +186,10 @@ import (
     "fmt"
     "os"
 
+    "github.com/dreamzero-oxm/go-react-agent/agent"
+    "github.com/dreamzero-oxm/go-react-agent/logger"
+    "github.com/dreamzero-oxm/go-react-agent/llm"
+    "github.com/dreamzero-oxm/go-react-agent/tools"
     "github.com/dreamzero-oxm/go-react-agent/agent"
     "github.com/dreamzero-oxm/go-react-agent/logger"
     "github.com/dreamzero-oxm/go-react-agent/llm"
@@ -392,10 +426,12 @@ config := &agent.Config{
     MaxIterations: 10,
     Timeout:       5 * time.Minute,
     Parser:        agent.NewJSONParser(),  // Use default JSON parser
+    Parser:        agent.NewJSONParser(),  // Use default JSON parser
 }
 reactAgent := agent.NewReActAgent(llm, config, log)
 ```
 
+Or use defaults (includes JSON parser):
 Or use defaults (includes JSON parser):
 
 ```go
@@ -409,6 +445,32 @@ config := agent.DefaultConfig()
 - `LevelWarn` - Warning messages
 - `LevelError` - Error messages only
 - `LevelFatal` - Fatal errors that cause program exit
+
+#### Custom Response Parsers
+
+Implement the `ResponseParser` interface for custom response formats:
+
+```go
+// Define a custom parser
+type XMLParser struct{}
+
+func (x *XMLParser) Parse(response string) (*agent.ReActResponse, error) {
+    // Your custom parsing logic
+    // For example: parse XML format instead of JSON
+    // ...
+    return &agent.ReActResponse{}, nil
+}
+
+// Use the custom parser
+config := agent.DefaultConfig()
+config.Parser = &XMLParser{}
+reactAgent := agent.NewReActAgent(llm, config, log)
+```
+
+This is useful when:
+- Using LLMs that don't support JSON output well
+- Working with specialized response formats
+- Implementing custom validation or preprocessing
 
 #### Custom Response Parsers
 
@@ -674,6 +736,8 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 🔗 Links
 
+- [GitHub Repository](https://github.com/dreamzero-oxm/go-react-agent)
+- [API Documentation](https://pkg.go.dev/github.com/dreamzero-oxm/go-react-agent)
 - [GitHub Repository](https://github.com/dreamzero-oxm/go-react-agent)
 - [API Documentation](https://pkg.go.dev/github.com/dreamzero-oxm/go-react-agent)
 - [Examples](./example/)
