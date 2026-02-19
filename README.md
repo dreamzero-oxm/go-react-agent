@@ -71,6 +71,72 @@ The parser automatically handles markdown code blocks (` ```json ... ` ` `) and 
 - **📊 Callback System** - Monitor agent execution step-by-step with callbacks
 - **🏪 Factory Pattern** - Unified LLM creation via factory interface
 - **🌍 Local & Cloud** - Support for both local models (Ollama) and cloud APIs
+- **🎯 Planning Feature** - Intelligent task decomposition and adaptive re-planning
+
+## 🎯 Planning Feature
+
+The planning feature enables intelligent task decomposition and adaptive execution for complex multi-step tasks.
+
+### How Planning Works
+
+1. **Initial Planning**: The agent analyzes the query and creates a structured plan before execution
+2. **Step Execution**: Executes planned steps sequentially while tracking progress
+3. **Adaptive Re-planning**: After each step (or every N steps), the agent updates the plan based on results
+
+### Enabling Planning
+
+```go
+// Create agent with planning enabled
+planConfig := agent.DefaultPlanConfig()
+planConfig.Enabled = true        // Enable planning
+planConfig.ReplanEnabled = true  // Enable re-planning
+planConfig.ReplanEvery = 1       // Re-plan after each step
+
+config := agent.DefaultConfig()
+config.PlanConfig = planConfig
+
+planningAgent := agent.NewReActAgentWithPlanning(llm, config, planConfig, log)
+planningAgent.InitializePlanning(llm)
+
+// Register tools
+tools.RegisterBuiltinToolsTo(planningAgent)
+
+// Run with planning
+response, plan, err := planningAgent.RunWithPlan(ctx, query)
+if err != nil {
+    panic(err)
+}
+
+fmt.Printf("Plan:\n")
+for _, step := range plan.Steps {
+    fmt.Printf("  [%s] %s\n", step.Status, step.Description)
+}
+fmt.Printf("Answer: %s\n", response.Answer)
+```
+
+### Planning Configuration Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `Enabled` | bool | false | Enable planning feature (opt-in) |
+| `ReplanEnabled` | bool | true | Enable adaptive re-planning |
+| `ReplanEvery` | int | 1 | Re-plan every N steps |
+| `SystemPrompt` | string | "" | Custom planning system prompt |
+
+### Backward Compatibility
+
+The planning feature is completely opt-in. Existing code continues to work without changes:
+
+```go
+// Standard ReAct agent (no planning)
+agent := agent.NewReActAgent(llm, config, log)
+response, err := agent.Run(ctx, query) // Works as before
+
+// Or with planning disabled
+planConfig := agent.DefaultPlanConfig() // Enabled defaults to false
+planningAgent := agent.NewReActAgentWithPlanning(llm, config, planConfig, log)
+response, err := planningAgent.Run(ctx, query) // Falls back to standard execution
+```
 
 ## 📦 Installation
 
@@ -570,6 +636,37 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - The Go community for excellent tooling and libraries
 
 ## 📞 Support
+
+- **Issues**: Open an issue on GitHub for bugs or feature requests
+- **Discussions**: Use GitHub Discussions for questions and ideas
+- **Documentation**: Check inline code documentation for detailed API info
+
+## 📝 CHANGELOG
+
+### [Unreleased] - 2025-02-19
+
+#### Added
+- **Planning Feature**: Initial plan generation and adaptive re-planning capability
+  - `ReActAgentWithPlanning` for plan-enabled agents
+  - `Plan` and `PlanStep` types for structured plan representation
+  - `PlanningAgent` for plan creation and updates
+  - `PlanConfig` for planning behavior configuration
+  - `RunWithPlan()` method returning both response and plan
+  - `GetPlan()` method to retrieve current execution plan
+
+#### Documentation
+- Added Planning Feature section to README with usage examples
+- Added CHANGELOG section to track feature additions
+
+### [1.0.0] - Initial Release
+- Core ReAct agent architecture
+- Multi-LLM support (OpenAI, Anthropic, Gemini, etc.)
+- JSON-based response parsing with markdown handling
+- Built-in tools (calculate, http_get, read_file, write_file, echo, search_files)
+- Callback system for monitoring
+- Streaming support
+
+## 🔗 Links
 
 - **Issues**: Open an issue on GitHub for bugs or feature requests
 - **Discussions**: Use GitHub Discussions for questions and ideas
