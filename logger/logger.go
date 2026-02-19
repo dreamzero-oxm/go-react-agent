@@ -182,15 +182,17 @@ func (cl *ConsoleLogger) formatMessage(level LogLevel, msg string, fields map[st
 
 	var fieldsStr string
 	if len(fields) > 0 {
-		fieldsStr = " | "
+		var builder strings.Builder
+		builder.WriteString(" | ")
 		first := true
 		for k, v := range fields {
 			if !first {
-				fieldsStr += ", "
+				builder.WriteString(", ")
 			}
-			fieldsStr += fmt.Sprintf("%s=%v", k, v)
+			fmt.Fprintf(&builder, "%s=%v", k, v)
 			first = false
 		}
+		fieldsStr = builder.String()
 	}
 
 	return fmt.Sprintf("[%s] %s %s%s", timestamp, levelStr, msg, fieldsStr)
@@ -327,21 +329,23 @@ func (fl *FileLogger) log(level LogLevel, msg string, fields map[string]interfac
 		LevelFatal: "FATAL",
 	}[level]
 
-	logLine := fmt.Sprintf("[%s] %s %s", timestamp, levelStr, msg)
+	var builder strings.Builder
+	fmt.Fprintf(&builder, "[%s] %s %s", timestamp, levelStr, msg)
 
 	if len(fields) > 0 {
-		logLine += " | "
+		builder.WriteString(" | ")
 		first := true
 		for k, v := range fields {
 			if !first {
-				logLine += ", "
+				builder.WriteString(", ")
 			}
-			logLine += fmt.Sprintf("%s=%v", k, v)
+			fmt.Fprintf(&builder, "%s=%v", k, v)
 			first = false
 		}
 	}
 
-	logLine += "\n"
+	builder.WriteString("\n")
+	logLine := builder.String()
 	if _, err := fl.file.WriteString(logLine); err != nil {
 		fmt.Printf("Failed to write to log file: %v\n", err)
 	}

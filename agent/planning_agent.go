@@ -289,7 +289,7 @@ func (p *PlanningAgent) injectTools(prompt string) string {
 	if strings.Contains(prompt, "{{TOOLS}}") {
 		return strings.ReplaceAll(prompt, "{{TOOLS}}", toolsSchema)
 	}
-	return prompt + "\n\n## Available Tools\n\n" + toolsSchema
+	return fmt.Sprintf("%s\n\n## Available Tools\n\n%s", prompt, toolsSchema)
 }
 
 func (p *PlanningAgent) parsePlanResponse(response string) (*PlanResponse, error) {

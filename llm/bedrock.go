@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -281,25 +282,30 @@ func hmacSHA256(key, data []byte) []byte {
 }
 
 func getCanonicalHeaders(req *http.Request) string {
-	headers := ""
+	var builder strings.Builder
 	for name, values := range req.Header {
 		lowerName := http.CanonicalHeaderKey(name)
 		for _, value := range values {
-			headers += lowerName + ":" + value + "\n"
+			builder.WriteString(lowerName)
+			builder.WriteByte(':')
+			builder.WriteString(value)
+			builder.WriteByte('\n')
 		}
 	}
-	return headers
+	return builder.String()
 }
 
 func getSignedHeaders(req *http.Request) string {
-	signedHeaders := ""
+	var builder strings.Builder
+	first := true
 	for name := range req.Header {
-		if signedHeaders != "" {
-			signedHeaders += ";"
+		if !first {
+			builder.WriteByte(';')
 		}
-		signedHeaders += http.CanonicalHeaderKey(name)
+		builder.WriteString(http.CanonicalHeaderKey(name))
+		first = false
 	}
-	return signedHeaders
+	return builder.String()
 }
 
 func (b *BedrockLLM) Close() error {

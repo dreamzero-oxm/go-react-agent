@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/dreamzero-oxm/go-react-agent/llm"
 	"github.com/dreamzero-oxm/go-react-agent/logger"
@@ -203,6 +204,12 @@ func (a *ReActAgentWithPlanning) executeWithPlan(ctx context.Context, plan *Plan
 }
 
 func (a *ReActAgentWithPlanning) executeWithLLM(ctx context.Context, messages []llm.Message, step *PlanStep) (string, error) {
+	select {
+	case <-ctx.Done():
+		return "", ctx.Err()
+	default:
+	}
+
 	prompt := fmt.Sprintf("Execute this step: %s", step.Description)
 	messages = append(messages, llm.Message{Role: llm.RoleUser, Content: prompt})
 
@@ -233,13 +240,13 @@ func (a *ReActAgentWithPlanning) executeWithLLM(ctx context.Context, messages []
 }
 
 func (a *ReActAgentWithPlanning) formatPlanResults(plan *Plan) string {
-	result := ""
+	var builder strings.Builder
 	for _, step := range plan.Steps {
 		if step.Status == "completed" {
-			result += fmt.Sprintf("- %s: %s\n", step.Description, step.Result)
+			fmt.Fprintf(&builder, "- %s: %s\n", step.Description, step.Result)
 		}
 	}
-	return result
+	return builder.String()
 }
 
 // findFirstPendingStep finds the index of the first step with pending status

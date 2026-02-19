@@ -2,6 +2,7 @@ package tools
 
 import (
 	"fmt"
+	"strings"
 )
 
 type ToolRegistry struct {
@@ -86,19 +87,20 @@ func (tr *ToolRegistry) Execute(name string, input map[string]interface{}) (stri
 }
 
 func (tr *ToolRegistry) GetToolsSchema() string {
-	schema := "Available tools:\n"
+	var builder strings.Builder
+	builder.WriteString("Available tools:\n")
 	for name, tool := range tr.tools {
-		schema += fmt.Sprintf("- %s: %s\n", name, tool.Description)
+		fmt.Fprintf(&builder, "- %s: %s\n", name, tool.Description)
 		if len(tool.Parameters) > 0 {
-			schema += "  Parameters:\n"
+			builder.WriteString("  Parameters:\n")
 			for paramName, param := range tool.Parameters {
 				required := ""
 				if param.Required {
 					required = " (required)"
 				}
-				schema += fmt.Sprintf("    - %s (%s)%s: %s\n", paramName, param.Type, required, param.Description)
+				fmt.Fprintf(&builder, "    - %s (%s)%s: %s\n", paramName, param.Type, required, param.Description)
 			}
 		}
 	}
-	return schema
+	return builder.String()
 }
