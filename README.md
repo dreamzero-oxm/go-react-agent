@@ -634,19 +634,59 @@ This is useful when:
 
 The framework includes these ready-to-use tools:
 
+#### Math & Calculation
 | Tool | Description |
 |------|-------------|
-| `calculate` | Perform arithmetic calculations |
-| `http_get` | Make HTTP GET requests |
-| `read_file` | Read file contents |
-| `write_file` | Write content to files |
-| `echo` | Echo back text |
-| `search_files` | Search for files matching a pattern |
+| `calculate` | Evaluates basic arithmetic expressions with support for addition, subtraction, multiplication, division, and parentheses |
+
+#### HTTP & Network
+| Tool | Description |
+|------|-------------|
+| `http_get` | Performs HTTP GET requests to specified URLs and returns response with status code and body |
+
+#### File Operations
+| Tool | Description |
+|------|-------------|
+| `read_file` | Reads complete file contents from specified path and returns text |
+| `write_file` | Writes content to files with support for overwrite or append modes |
+| `delete_file` | Permanently deletes files at specified paths |
+| `list_files` | Lists all files and subdirectories in a specified directory with optional hidden file inclusion |
+| `create_directory` | Creates new directories with automatic parent directory creation (like mkdir -p) |
+| `search_files` | Searches for files matching patterns in directories with wildcard and recursive support |
+
+#### Text & Data Processing
+| Tool | Description |
+|------|-------------|
+| `echo` | Returns provided text content with optional case transformation |
+| `format_text` | Applies various text transformations including case conversion, reversal, trimming, and replacement |
+| `base64_encode` | Encodes text or data into Base64 format using standard encoding scheme |
+| `base64_decode` | Decodes Base64 encoded data back to original text |
+| `regex_match` | Tests if text matches specified regular expression patterns |
+| `json_parse` | Parses and validates JSON strings with support for field extraction |
+| `url_encode` | Performs URL encoding on text for safe use in URLs and query parameters |
+| `url_decode` | Decodes URL-encoded strings back to plain text |
+
+#### Time & Date
+| Tool | Description |
+|------|-------------|
+| `current_time` | Retrieves current date and time with multiple output formats and timezone support |
+
+#### Registering Tools
 
 Register all built-in tools:
 
 ```go
 tools.RegisterBuiltinToolsTo(reactAgent)
+```
+
+Register individual tools:
+
+```go
+reactAgent.RegisterTool(tools.NewCalculateTool())
+reactAgent.RegisterTool(tools.NewReadFileTool())
+reactAgent.RegisterTool(tools.NewWriteFileTool())
+reactAgent.RegisterTool(tools.NewSearchFilesTool())
+// ... or any other built-in tool
 ```
 
 ### API Reference
