@@ -29,7 +29,182 @@ ReAct is a paradigm that combines reasoning and acting in an iterative loop:
 3. **Observation** - The agent observes the result and updates its understanding
 4. **Iteration** - The cycle repeats until the agent reaches a solution
 
-### 📋 JSON Response Format
+### 🔄 React Agent Architecture
+
+#### Component Overview
+
+```mermaid
+classDiagram
+    class Agent {
+        <<interface>>
+        +Run(ctx, query) ReActResponse
+        +RegisterTool(tool) error
+    }
+    
+    class ReActAgent {
+        -llm LLM
+        -tools ToolRegistry
+        -config Config
+        -logger Logger
+        -systemPrompt string
+        -parser ResponseParser
+        +Run(ctx, query) ReActResponse
+        +RunWithCallback(ctx, query, callback) ReActResponse
+        +RegisterTool(tool) error
+        +Execute(name, input) string
+    }
+    
+    class ReActAgentWithPlanning {
+        -planAgent PlanningAgent
+        -planConfig PlanConfig
+        -currentPlan Plan
+        +InitializePlanning(llm)
+        +RunWithPlan(ctx, query) Response,Plan
+    }
+    
+    class PlanningAgent {
+        -llm LLM
+        -tools ToolRegistry
+        -config PlanConfig
+        +CreateInitialPlan(ctx, query) Plan
+        +Replan(ctx, plan, step, observation) Plan
+    }
+    
+    class ToolRegistry {
+        <<interface>>
+        +RegisterTool(tool) error
+        +Execute(name, input) string
+        +Get(name) Tool
+        +List() []string
+    }
+    
+    class LLM {
+        <<interface>>
+        +Generate(messages) string
+        +GenerateWithSystem(prompt, messages) string
+    }
+    
+    class ResponseParser {
+        <<interface>>
+        +Parse(response) ReActResponse
+    }
+    
+    class Plan {
+        +Query string
+        +Steps []PlanStep
+        +CurrentStep int
+        +Status string
+        +Reasoning string
+    }
+    
+    class PlanStep {
+        +ID string
+        +Description string
+        +Tool string
+        +Input map
+        +Status string
+        +Result string
+    }
+    
+    Agent <|-- ReActAgent
+    ReActAgent <|-- ReActAgentWithPlanning
+    ReActAgentWithPlanning --> PlanningAgent : uses
+    ReActAgent --> ToolRegistry : uses
+    ReActAgent --> LLM : uses
+    ReActAgent --> ResponseParser : uses
+    PlanningAgent --> ToolRegistry : uses
+    PlanningAgent --> LLM : uses
+    ReActAgentWithPlanning --> Plan : manages
+    Plan --> PlanStep : contains
+```
+
+#### React Agent Flow Diagram
+
+```mermaid
+flowchart TD
+    A[User Query] --> B[Initialize ReActAgent]
+    B --> C[Build Initial Message]
+    C --> D[Iteration Loop]
+    
+    D --> E{Max Iterations Reached?}
+    E -->|Yes| F[Return Error]
+    E -->|No| G[Generate LLM Response]
+    
+    G --> H[Parse JSON Response]
+    H --> I{Parse Success?}
+    I -->|No| F
+    I -->|Yes| J[Check Done Flag]
+    
+    J -->|Done = True| K[Return Final Answer]
+    J -->|Done = False| L{Has Action?}
+    
+    L -->|No| M[Return Error]
+    L -->|Yes| N[Execute Tool]
+    
+    N --> O{Execution Success?}
+    O -->|No| P[Record Error]
+    O -->|Yes| Q[Record Observation]
+    
+    P --> R[Add Error to Message History]
+    Q --> R
+    R --> D
+    
+    style A fill:#e1f5ff
+    style K fill:#c8e6c9
+    style F fill:#ffcdd2
+```
+
+#### React Agent Sequence Diagram
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Agent as ReActAgent
+    participant LLM
+    participant Parser as JSONParser
+    participant Tool as ToolRegistry
+    
+    User->>Agent: Run(query)
+    Agent->>Agent: Build initial message
+    Agent->>Agent: Start iteration loop
+    
+    loop Iteration (max MaxIterations)
+        Agent->>LLM: GenerateWithSystem(messages)
+        LLM-->>Agent: JSON response
+        Agent->>Parser: Parse(response)
+        
+        alt Parse Failed
+            Parser-->>Agent: error
+            Agent-->>User: error
+        else Parse Success
+            Parser-->>Agent: ReActResponse
+            
+            alt Done = True
+                Agent-->>User: Return final answer
+            else Done = False
+                alt No Action
+                    Agent-->>User: error
+                else Has Action
+                    Agent->>Tool: Execute(action.name, action.input)
+                    
+                    alt Tool Execution Failed
+                        Tool-->>Agent: error
+                        Agent->>Agent: Record error in step
+                        Agent->>Agent: Add error to messages
+                    else Tool Execution Success
+                        Tool-->>Agent: result
+                        Agent->>Agent: Record observation in step
+                        Agent->>Agent: Add observation to messages
+                    end
+                end
+            end
+        end
+    end
+    
+    Agent-->>User: ReActResponse with answer
+```
+
+### � JSON Response Format
 
 The agent uses structured JSON responses for reliable parsing. LLMs respond with this format:
 
@@ -112,6 +287,144 @@ The planning feature enables intelligent task decomposition and adaptive executi
 1. **Initial Planning**: The agent analyzes the query and creates a structured plan before execution
 2. **Step Execution**: Executes planned steps sequentially while tracking progress
 3. **Adaptive Re-planning**: After each step (or every N steps), the agent updates the plan based on results
+
+### 🏗️ Plan Agent Architecture
+
+#### Plan Agent Flow Diagram
+
+```mermaid
+flowchart TD
+    A[User Query] --> B[Initialize ReActAgentWithPlanning]
+    B --> C[Initialize PlanningAgent]
+    C --> D[CreateInitialPlan]
+    
+    D --> E[LLM Generate Plan]
+    E --> F[Parse Plan Response]
+    F --> G[Initialize Plan Steps]
+    G --> H[Set Plan Status: executing]
+    
+    H --> I[Step Execution Loop]
+    I --> J{Step Already Completed?}
+    J -->|Yes| K[Skip Step]
+    J -->|No| L[Set Status: in_progress]
+    
+    L --> M{Has Tool Specified?}
+    M -->|Yes| N[Execute Tool]
+    M -->|No| O[Execute with LLM Decision]
+    
+    N --> P{Execution Success?}
+    O --> P
+    
+    P -->|No| Q[Set Status: failed]
+    Q --> R{Replan Enabled?}
+    R -->|Yes| S[Call Replan]
+    R -->|No| T[Return Error]
+    
+    P -->|Yes| U[Set Status: completed]
+    U --> V[Record Result]
+    V --> W{Replan Enabled?<br/>Every N Steps?}
+    W -->|Yes| S
+    W -->|No| X{More Steps?}
+    
+    S --> Y[LLM Generate New Plan]
+    Y --> Z[Parse New Plan]
+    Z --> AA[Merge Plans]
+    AA --> AB[Update Current Plan]
+    AB --> I
+    
+    K --> X
+    X -->|Yes| I
+    X -->|No| AC[Set Plan Status: completed]
+    
+    AC --> AD[Generate Final Answer]
+    AD --> AE[LLM Generate Final Response]
+    AE --> AF[Parse Final Response]
+    AF --> AG[Return Response & Plan]
+    
+    T --> AH[Return Error]
+    
+    style A fill:#e1f5ff
+    style AG fill:#c8e6c9
+    style AH fill:#ffcdd2
+    style S fill:#fff9c4
+```
+
+#### Plan Agent Sequence Diagram
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Agent as ReActAgentWithPlanning
+    participant PlanAgent as PlanningAgent
+    participant LLM
+    participant Tool as ToolRegistry
+    
+    User->>Agent: RunWithPlan(query)
+    Agent->>Agent: Initialize PlanningAgent
+    
+    Note over Agent,PlanAgent: Initial Planning Phase
+    Agent->>PlanAgent: CreateInitialPlan(query)
+    PlanAgent->>LLM: GenerateWithSystem(plan prompt)
+    LLM-->>PlanAgent: Plan JSON response
+    PlanAgent->>PlanAgent: Parse plan response
+    PlanAgent->>PlanAgent: Initialize plan steps
+    PlanAgent-->>Agent: Plan object
+    
+    Note over Agent,Tool: Step Execution Phase
+    loop For each plan step
+        Agent->>Agent: Check step status
+        
+        alt Step already completed
+            Agent->>Agent: Skip step
+        else Step pending
+            Agent->>Agent: Set status: in_progress
+            
+            alt Tool specified in step
+                Agent->>Tool: Execute(tool, input)
+            else No tool specified
+                Agent->>LLM: GenerateWithSystem(decision prompt)
+                LLM-->>Agent: Action decision
+                Agent->>Tool: Execute(tool, input)
+            end
+            
+            alt Tool execution failed
+                Tool-->>Agent: error
+                Agent->>Agent: Set status: failed
+                
+                alt Replan enabled
+                    Agent->>PlanAgent: Replan(plan, failed_step, error)
+                    PlanAgent->>PlanAgent: Format replan request
+                    PlanAgent->>LLM: GenerateWithSystem(replan prompt)
+                    LLM-->>PlanAgent: New plan JSON
+                    PlanAgent->>PlanAgent: Parse new plan
+                    PlanAgent->>PlanAgent: Merge old & new plans
+                    PlanAgent-->>Agent: Updated plan
+                    Agent->>Agent: Update current plan
+                else Replan disabled
+                    Agent-->>User: Return error
+                end
+            else Tool execution success
+                Tool-->>Agent: result
+                Agent->>Agent: Set status: completed
+                Agent->>Agent: Record result
+                
+                alt Replan enabled & every N steps
+                    Agent->>PlanAgent: Replan(plan, step, result)
+                    PlanAgent->>LLM: Generate updated plan
+                    PlanAgent->>PlanAgent: Parse & merge plans
+                    PlanAgent-->>Agent: Updated plan
+                end
+            end
+        end
+    end
+    
+    Note over Agent,LLM: Final Answer Generation
+    Agent->>Agent: Set plan status: completed
+    Agent->>LLM: GenerateWithSystem(final answer prompt)
+    LLM-->>Agent: Final response
+    Agent->>Agent: Parse final response
+    Agent-->>User: ReActResponse & Plan
+```
 
 ### Enabling Planning
 
