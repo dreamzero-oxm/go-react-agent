@@ -1,16 +1,58 @@
 package agent
 
-import "time"
+import (
+	"reflect"
+	"time"
+)
 
-type Config struct {
-	MaxIterations int            `json:"max_iterations"`
-	Timeout       time.Duration  `json:"timeout"`
-	Temperature   float64        `json:"temperature"`
-	MaxTokens     int            `json:"max_tokens"`
-	Parser        ResponseParser `json:"-"` // Response parser for LLM output
-	PlanConfig    *PlanConfig    `json:"plan_config,omitempty"` // Planning feature configuration
+// OutputConfig defines the configuration for structured output behavior.
+type OutputConfig struct {
+	// OutputType is the target struct type for structured output (using reflect.Type)
+	OutputType reflect.Type `json:"-"`
+
+	// OutputSchema is the generated JSON schema string
+	OutputSchema string `json:"output_schema,omitempty"`
+
+	// EnableStructuredOutput enables structured output mode
+	EnableStructuredOutput bool `json:"enable_structured_output"`
+
+	// MaxNestingDepth is the maximum nesting depth for schema generation
+	// (prevents overly long prompts)
+	MaxNestingDepth int `json:"max_nesting_depth"`
+
+	// MaxParseRetries is the maximum number of retries for parsing structured output
+	MaxParseRetries int `json:"max_parse_retries"`
 }
 
+// Config holds the configuration for the ReAct agent.
+type Config struct {
+	// MaxIterations is the maximum number of reasoning-acting cycles
+	MaxIterations int `json:"max_iterations"`
+	// Timeout is the maximum duration for agent execution
+	Timeout time.Duration `json:"timeout"`
+	// Temperature controls the randomness of LLM responses (0.0 to 1.0)
+	Temperature float64 `json:"temperature"`
+	// MaxTokens is the maximum number of tokens in LLM responses
+	MaxTokens int `json:"max_tokens"`
+	// Parser is the response parser for LLM output
+	Parser ResponseParser `json:"-"`
+	// PlanConfig contains planning feature configuration
+	PlanConfig *PlanConfig `json:"plan_config,omitempty"`
+	// Output contains structured output configuration
+	Output *OutputConfig `json:"output,omitempty"`
+}
+
+// DefaultConfig returns a Config with sensible default values.
+//
+// Defaults:
+//   - MaxIterations: 10
+//   - Timeout: 10 minutes
+//   - Temperature: 0.7
+//   - MaxTokens: 4096
+//   - Parser: JSONParser
+//   - EnableStructuredOutput: false
+//   - MaxNestingDepth: 5
+//   - MaxParseRetries: 3
 func DefaultConfig() *Config {
 	return &Config{
 		MaxIterations: 10,
@@ -18,5 +60,10 @@ func DefaultConfig() *Config {
 		Temperature:   0.7,
 		MaxTokens:     4096,
 		Parser:        NewJSONParser(),
+		Output: &OutputConfig{
+			EnableStructuredOutput: false,
+			MaxNestingDepth:        5,
+			MaxParseRetries:        3,
+		},
 	}
 }
