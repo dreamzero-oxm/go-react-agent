@@ -256,6 +256,32 @@ The agent uses structured JSON responses for reliable parsing. LLMs respond with
 
 The parser automatically handles markdown code blocks (` ```json ... ` ` `) and validates responses for correctness.
 
+### 📋 JSON Response Format
+
+The agent uses structured JSON responses for reliable parsing. LLMs respond with this format:
+
+**For tool actions:**
+```json
+{
+  "thoughts": [{"content": "I need to use a tool"}],
+  "action": {"name": "tool_name", "input": {"param": "value"}},
+  "answer": null,
+  "done": false
+}
+```
+
+**For final answers:**
+```json
+{
+  "thoughts": [{"content": "I have enough information"}],
+  "action": null,
+  "answer": "Final answer here",
+  "done": true
+}
+```
+
+The parser automatically handles markdown code blocks (` ```json ... ` ` `) and validates responses for correctness.
+
 ## ✨ Features
 
 - **🧠 Complete ReAct Architecture** - Full implementation of the Thought-Action-Observation loop
