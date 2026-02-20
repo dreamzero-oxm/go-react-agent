@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
-	// "os"
+	"os"
 
 	"github.com/dreamzero-oxm/go-react-agent/agent"
 	"github.com/dreamzero-oxm/go-react-agent/llm"
@@ -45,28 +45,21 @@ func main() {
 	multiLog.AddConsoleLogger(true)
 
 	// Get API key from environment
-	// apiKey := os.Getenv("OPENAI_API_KEY")
-	// if apiKey == "" {
-	// 	fmt.Println("Please set OPENAI_API_KEY environment variable")
-	// 	os.Exit(1)
-	// }
+	apiKey := os.Getenv("OPENAI_API_KEY")
+	if apiKey == "" {
+		fmt.Println("Please set OPENAI_API_KEY environment variable")
+		os.Exit(1)
+	}
 
-	// // Configure LLM
-	// llmConfig := &llm.LLMConfig{
-	// 	APIKey:      apiKey,
-	// 	BaseURL:     "https://api.openai.com/v1/chat/completions",
-	// 	Model:       "gpt-4",
-	// 	Temperature: 0.7,
-	// 	MaxTokens:   3000,
-	// }
-	// // Configure LLM
+	// Configure LLM
 	llmConfig := &llm.LLMConfig{
-		APIKey:      "API_KEY",
-		BaseURL:     "https://open.bigmodel.cn/api/coding/paas/v4",
-		Model:       "glm-4.7",
+		APIKey:      apiKey,
+		BaseURL:     "https://api.openai.com/v1/chat/completions",
+		Model:       "gpt-4",
 		Temperature: 0.7,
 		MaxTokens:   3000,
 	}
+	// Configure LLM
 
 	openaiLLM, err := llm.NewOpenAILLM(llmConfig)
 	if err != nil {
