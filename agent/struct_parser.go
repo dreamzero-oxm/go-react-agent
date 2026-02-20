@@ -7,9 +7,9 @@ import (
 	"strings"
 )
 
-// StructParser handles struct analysis and schema generation
+// StructParser handles struct analysis and JSON schema generation.
 type StructParser struct {
-	maxNestingDepth int
+	maxNestingDepth int // Maximum nesting depth for schema generation
 }
 
 // NewStructParser creates a new struct parser

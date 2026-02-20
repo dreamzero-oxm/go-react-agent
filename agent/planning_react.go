@@ -106,6 +106,7 @@ func (a *ReActAgentWithPlanning) Close() error {
 	return a.ReActAgent.Close()
 }
 
+// executeWithPlan executes the query following the given plan.
 func (a *ReActAgentWithPlanning) executeWithPlan(ctx context.Context, plan *Plan, query string) (*ReActResponse, error) {
 	plan.Status = "executing"
 
@@ -220,6 +221,7 @@ func (a *ReActAgentWithPlanning) executeWithPlan(ctx context.Context, plan *Plan
 	return parsed, nil
 }
 
+// executeWithLLM executes a step using the LLM when no specific tool is specified.
 func (a *ReActAgentWithPlanning) executeWithLLM(ctx context.Context, messages []llm.Message, step *PlanStep) (string, error) {
 	select {
 	case <-ctx.Done():
@@ -260,6 +262,7 @@ func (a *ReActAgentWithPlanning) executeWithLLM(ctx context.Context, messages []
 	return "Step completed", nil
 }
 
+// formatPlanResults formats the plan results into a readable string.
 func (a *ReActAgentWithPlanning) formatPlanResults(plan *Plan) string {
 	var builder strings.Builder
 	for _, step := range plan.Steps {

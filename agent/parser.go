@@ -6,15 +6,17 @@ import (
 	"strings"
 )
 
-// ResponseParser defines the interface for parsing LLM responses
+// ResponseParser defines the interface for parsing LLM responses into
+// structured ReActResponse objects.
 type ResponseParser interface {
+	// Parse parses the LLM response string into a ReActResponse.
 	Parse(response string) (*ReActResponse, error)
 }
 
-// JSONParser implements ResponseParser for JSON-based responses
+// JSONParser implements ResponseParser for JSON-based responses.
 type JSONParser struct{}
 
-// NewJSONParser creates a new JSONParser instance
+// NewJSONParser creates a new JSONParser instance.
 func NewJSONParser() *JSONParser {
 	return &JSONParser{}
 }
@@ -87,17 +89,19 @@ func (j *JSONParser) validate(result *ReActResponse) error {
 	return nil
 }
 
-// ParseError provides detailed parsing error information
+// ParseError provides detailed parsing error information.
 type ParseError struct {
-	RawResponse string
-	Err         error
-	Context     string
+	RawResponse string // The original response that failed to parse
+	Err         error  // The underlying error
+	Context     string // The context where the error occurred
 }
 
+// Error returns the error message with context.
 func (e *ParseError) Error() string {
 	return fmt.Sprintf("parse error at %s: %v\nRaw response: %q", e.Context, e.Err, e.RawResponse)
 }
 
+// Unwrap returns the underlying error for error wrapping.
 func (e *ParseError) Unwrap() error {
 	return e.Err
 }

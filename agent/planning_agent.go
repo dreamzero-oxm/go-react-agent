@@ -99,6 +99,7 @@ func (p *PlanningAgent) Replan(ctx context.Context, plan *Plan, lastStep *PlanSt
 	return p.mergePlans(plan, planResp), nil
 }
 
+// getSystemPrompt returns the system prompt for plan generation.
 func (p *PlanningAgent) getSystemPrompt() string {
 	if p.config.SystemPrompt != "" {
 		return p.injectTools(p.config.SystemPrompt)
@@ -268,6 +269,7 @@ Respond ONLY with valid JSON in this exact format:
 8. Distinguish between verified facts, inferred suggestions, and pending confirmations in your reasoning`)
 }
 
+// getReplanSystemPrompt returns the system prompt for re-planning.
 func (p *PlanningAgent) getReplanSystemPrompt() string {
 	return p.injectTools(`You are an expert re-planning agent. Your task is to update execution plans based on progress and new information.
 
@@ -448,6 +450,7 @@ Respond ONLY with valid JSON in this exact format:
 10. **Plan Completion**: If all required information has been collected and the goal is achieved, return an empty steps array to indicate plan completion`)
 }
 
+// injectTools injects the tools schema into the prompt.
 func (p *PlanningAgent) injectTools(prompt string) string {
 	toolsSchema := p.tools.GetToolsSchema()
 	if strings.Contains(prompt, "{{tools}}") {
@@ -459,6 +462,7 @@ func (p *PlanningAgent) injectTools(prompt string) string {
 	return fmt.Sprintf("%s\n\n## Available Tools\n\n%s", prompt, toolsSchema)
 }
 
+// parsePlanResponse parses the LLM response into a PlanResponse.
 func (p *PlanningAgent) parsePlanResponse(response string) (*PlanResponse, error) {
 	cleaned := strings.TrimSpace(response)
 	// Remove markdown code blocks if present
@@ -484,6 +488,7 @@ func (p *PlanningAgent) parsePlanResponse(response string) (*PlanResponse, error
 	return &result, nil
 }
 
+// formatReplanRequest formats the re-planning request with plan context.
 func (p *PlanningAgent) formatReplanRequest(plan *Plan, lastStep *PlanStep, observation string) string {
 	return fmt.Sprintf(`Update the execution plan based on completed step.
 
@@ -500,6 +505,7 @@ Current Plan:
 Please provide an updated plan.`, plan.Query, lastStep.ID, lastStep.Description, observation, p.formatPlan(plan))
 }
 
+// formatPlan formats the plan into a readable string.
 func (p *PlanningAgent) formatPlan(plan *Plan) string {
 	result := ""
 	for _, step := range plan.Steps {
@@ -512,6 +518,7 @@ func (p *PlanningAgent) formatPlan(plan *Plan) string {
 	return result
 }
 
+// mergePlans merges the original plan with new plan response, preserving completed steps.
 func (p *PlanningAgent) mergePlans(original *Plan, newResp *PlanResponse) *Plan {
 	// Keep completed steps, replace/update pending steps
 	updated := &Plan{
@@ -542,6 +549,7 @@ func (p *PlanningAgent) mergePlans(original *Plan, newResp *PlanResponse) *Plan 
 	return updated
 }
 
+// updatePlanStatus updates the plan status and returns the plan.
 func (p *PlanningAgent) updatePlanStatus(plan *Plan, status string) *Plan {
 	plan.Status = status
 	return plan

@@ -272,7 +272,7 @@ func TestStructParser_MaxNestingDepth(t *testing.T) {
 func TestStructParser_UnexportedFieldsSkipped(t *testing.T) {
 	type TestStruct struct {
 		Name     string `json:"name"`
-		internal string `json:"internal"` // unexported
+		internal string // unexported field
 	}
 
 	parser := NewStructParser()

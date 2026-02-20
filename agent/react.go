@@ -12,24 +12,41 @@ import (
 	"github.com/dreamzero-oxm/go-react-agent/tools"
 )
 
+// ToolRegistry defines the interface for managing and executing tools.
+//
+// Implementations can provide custom tool storage and execution strategies.
 type ToolRegistry interface {
+	// RegisterTool registers a new tool with the registry.
 	RegisterTool(tool *tools.Tool) error
+	// UnregisterTool removes a tool from the registry by name.
 	UnregisterTool(name string) error
+	// Get retrieves a tool by name.
 	Get(name string) (*tools.Tool, error)
+	// List returns the names of all registered tools.
 	List() []string
+	// Execute runs a tool with the given input parameters.
 	Execute(name string, input map[string]interface{}) (string, error)
+	// GetToolsSchema returns a formatted string describing all available tools.
 	GetToolsSchema() string
 }
 
+// ReActAgent implements the ReAct (Reasoning + Acting) pattern for autonomous agents.
+//
+// It maintains a registry of tools and iteratively reasons, acts, and observes
+// until it can provide a final answer to the user's query.
 type ReActAgent struct {
-	llm          llm.LLM
-	tools        ToolRegistry
-	config       *Config
-	logger       logger.Logger
-	systemPrompt string
-	parser       ResponseParser
+	llm          llm.LLM         // LLM for generating responses
+	tools        ToolRegistry    // Registry of available tools
+	config       *Config         // Agent configuration
+	logger       logger.Logger   // Logger for agent operations
+	systemPrompt string          // Custom system prompt (optional)
+	parser       ResponseParser  // Parser for LLM responses
 }
 
+// NewReActAgent creates a new ReActAgent instance with the provided LLM, configuration, and logger.
+//
+// If config is nil, DefaultConfig() will be used.
+// A default JSONParser is automatically configured if config.Parser is nil.
 func NewReActAgent(llm llm.LLM, config *Config, log logger.Logger) *ReActAgent {
 	if config == nil {
 		config = DefaultConfig()
@@ -49,6 +66,9 @@ func NewReActAgent(llm llm.LLM, config *Config, log logger.Logger) *ReActAgent {
 	}
 }
 
+// NewReActAgentWithRegistry creates a new ReActAgent with a custom tool registry.
+//
+// This allows sharing tools across multiple agents or using custom registry implementations.
 func NewReActAgentWithRegistry(llm llm.LLM, config *Config, log logger.Logger, registry ToolRegistry) *ReActAgent {
 	if config == nil {
 		config = DefaultConfig()
@@ -67,10 +87,12 @@ func NewReActAgentWithRegistry(llm llm.LLM, config *Config, log logger.Logger, r
 	}
 }
 
+// simpleToolRegistry is a basic in-memory implementation of ToolRegistry.
 type simpleToolRegistry struct {
 	tools map[string]*tools.Tool
 }
 
+// RegisterTool adds a tool to the registry.
 func (s *simpleToolRegistry) RegisterTool(tool *tools.Tool) error {
 	if tool.Name == "" {
 		return fmt.Errorf("tool name cannot be empty")
@@ -85,6 +107,7 @@ func (s *simpleToolRegistry) RegisterTool(tool *tools.Tool) error {
 	return nil
 }
 
+// UnregisterTool removes a tool from the registry.
 func (s *simpleToolRegistry) UnregisterTool(name string) error {
 	if _, exists := s.tools[name]; !exists {
 		return fmt.Errorf("tool '%s' not found", name)
@@ -93,6 +116,7 @@ func (s *simpleToolRegistry) UnregisterTool(name string) error {
 	return nil
 }
 
+// Get retrieves a tool from the registry by name.
 func (s *simpleToolRegistry) Get(name string) (*tools.Tool, error) {
 	tool, exists := s.tools[name]
 	if !exists {
@@ -101,6 +125,7 @@ func (s *simpleToolRegistry) Get(name string) (*tools.Tool, error) {
 	return tool, nil
 }
 
+// List returns the names of all registered tools.
 func (s *simpleToolRegistry) List() []string {
 	names := make([]string, 0, len(s.tools))
 	for name := range s.tools {
@@ -109,6 +134,9 @@ func (s *simpleToolRegistry) List() []string {
 	return names
 }
 
+// Execute runs a tool with the given input parameters.
+//
+// It validates required parameters before execution.
 func (s *simpleToolRegistry) Execute(name string, input map[string]interface{}) (string, error) {
 	tool, err := s.Get(name)
 	if err != nil {
@@ -126,6 +154,7 @@ func (s *simpleToolRegistry) Execute(name string, input map[string]interface{}) 
 	return tool.Execute(input)
 }
 
+// GetToolsSchema returns a formatted string describing all available tools.
 func (s *simpleToolRegistry) GetToolsSchema() string {
 	var builder strings.Builder
 	for name, tool := range s.tools {
@@ -144,10 +173,12 @@ func (s *simpleToolRegistry) GetToolsSchema() string {
 	return builder.String()
 }
 
+// SetSystemPrompt sets a custom system prompt for the agent.
 func (a *ReActAgent) SetSystemPrompt(prompt string) {
 	a.systemPrompt = prompt
 }
 
+// GetSystemPrompt returns the current system prompt with tools and output format injected.
 func (a *ReActAgent) GetSystemPrompt() string {
 	basePrompt := a.getBaseSystemPrompt()
 
@@ -159,6 +190,7 @@ func (a *ReActAgent) GetSystemPrompt() string {
 	return a.injectToolsIntoPrompt(basePrompt)
 }
 
+// getBaseSystemPrompt returns the base system prompt, using custom or default.
 func (a *ReActAgent) getBaseSystemPrompt() string {
 	if a.systemPrompt != "" {
 		return a.systemPrompt
@@ -295,6 +327,7 @@ Available tools:\n
 Remember: Your goal is to be helpful, accurate, and efficient. Always respond with valid JSON.`
 }
 
+// injectToolsIntoPrompt injects the tools schema into the prompt.
 func (a *ReActAgent) injectToolsIntoPrompt(prompt string) string {
 	toolsSchema := a.tools.GetToolsSchema()
 
@@ -309,6 +342,7 @@ func (a *ReActAgent) injectToolsIntoPrompt(prompt string) string {
 	return fmt.Sprintf("%s\n\n## Available Tools\n\n%s", prompt, toolsSchema)
 }
 
+// injectOutputFormat injects structured output instructions into the prompt.
 func (a *ReActAgent) injectOutputFormat(prompt string) string {
 	if a.config.Output == nil || a.config.Output.OutputSchema == "" {
 		return prompt
@@ -391,6 +425,9 @@ The content of the "answer" field (when parsed as JSON) must match this schema:
 	return prompt + instructions
 }
 
+// RegisterTool registers a tool with the agent.
+//
+// The tool must be a *tools.Tool type.
 func (a *ReActAgent) RegisterTool(tool interface{}) error {
 	if toolPtr, ok := tool.(*tools.Tool); ok {
 		return a.tools.RegisterTool(toolPtr)
@@ -398,30 +435,41 @@ func (a *ReActAgent) RegisterTool(tool interface{}) error {
 	return fmt.Errorf("tool must be *tools.Tool type")
 }
 
+// UnregisterTool removes a tool from the agent by name.
 func (a *ReActAgent) UnregisterTool(name string) error {
 	return a.tools.UnregisterTool(name)
 }
 
+// Register is an alias for RegisterTool.
 func (a *ReActAgent) Register(tool *tools.Tool) error {
 	return a.tools.RegisterTool(tool)
 }
 
+// Get retrieves a tool from the agent by name.
 func (a *ReActAgent) Get(name string) (interface{}, error) {
 	return a.tools.Get(name)
 }
 
+// Execute runs a tool with the given input parameters.
 func (a *ReActAgent) Execute(name string, input map[string]interface{}) (string, error) {
 	return a.tools.Execute(name, input)
 }
 
+// List returns the names of all registered tools.
 func (a *ReActAgent) List() []string {
 	return a.tools.List()
 }
 
+// Run executes the agent with the given query and returns the response.
+//
+// It uses the default timeout from config.
 func (a *ReActAgent) Run(ctx context.Context, query string) (*ReActResponse, error) {
 	return a.RunWithCallback(ctx, query, nil)
 }
 
+// RunWithCallback executes the agent with a callback function for each step.
+//
+// The callback is invoked after each action execution with the step details.
 func (a *ReActAgent) RunWithCallback(ctx context.Context, query string, callback func(step *Step)) (*ReActResponse, error) {
 	a.logger.Info("Starting ReAct agent", map[string]interface{}{
 		"query":          query,
@@ -555,16 +603,22 @@ func (a *ReActAgent) RunWithCallback(ctx context.Context, query string, callback
 	}, fmt.Errorf("max iterations (%d) reached without completion", a.config.MaxIterations)
 }
 
+// parseResponse parses the LLM response string into a ReActResponse.
 func (a *ReActAgent) parseResponse(response string) (*ReActResponse, error) {
 	return a.parser.Parse(response)
 }
 
-// RunStructured runs the agent and returns a struct-based response
+// RunStructured runs the agent and returns a struct-based response.
+//
+// The generic type T specifies the output structure. The agent will generate
+// JSON that matches the structure of T.
 func RunStructured[T any](agent *ReActAgent, ctx context.Context, query string) (*StructuredResponse[T], error) {
 	return RunStructuredWithCallback[T](agent, ctx, query, nil)
 }
 
-// RunStructuredWithCallback runs the agent with structured output and callback support
+// RunStructuredWithCallback runs the agent with structured output and callback support.
+//
+// The callback is invoked for each step during execution.
 func RunStructuredWithCallback[T any](agent *ReActAgent, ctx context.Context, query string, callback func(step *Step)) (*StructuredResponse[T], error) {
 	// Get the type of T
 	var zeroT T
@@ -614,6 +668,9 @@ func RunStructuredWithCallback[T any](agent *ReActAgent, ctx context.Context, qu
 	return result, nil
 }
 
+// Stream executes the agent with streaming LLM responses.
+//
+// The callback function is invoked for each chunk of the LLM response.
 func (a *ReActAgent) Stream(ctx context.Context, query string, callback func(chunk string)) error {
 	a.logger.Info("Starting streaming ReAct agent", map[string]interface{}{
 		"query": query,
@@ -659,6 +716,7 @@ func (a *ReActAgent) Stream(ctx context.Context, query string, callback func(chu
 	return nil
 }
 
+// Close closes the LLM connection and logger.
 func (a *ReActAgent) Close() error {
 	if a.llm != nil {
 		return a.llm.Close()

@@ -5,34 +5,54 @@ import (
 	"time"
 )
 
-// OutputConfig 定义结构化输出的配置
+// OutputConfig defines the configuration for structured output behavior.
 type OutputConfig struct {
-	// OutputType 是目标结构体的类型 (使用 reflect.Type)
+	// OutputType is the target struct type for structured output (using reflect.Type)
 	OutputType reflect.Type `json:"-"`
 
-	// OutputSchema 是生成的 JSON Schema 字符串
+	// OutputSchema is the generated JSON schema string
 	OutputSchema string `json:"output_schema,omitempty"`
 
-	// EnableStructuredOutput 启用结构化输出
+	// EnableStructuredOutput enables structured output mode
 	EnableStructuredOutput bool `json:"enable_structured_output"`
 
-	// MaxNestingDepth 最大嵌套层级（防止 Prompt 过长）
+	// MaxNestingDepth is the maximum nesting depth for schema generation
+	// (prevents overly long prompts)
 	MaxNestingDepth int `json:"max_nesting_depth"`
 
-	// MaxParseRetries 最大解析重试次数
+	// MaxParseRetries is the maximum number of retries for parsing structured output
 	MaxParseRetries int `json:"max_parse_retries"`
 }
 
+// Config holds the configuration for the ReAct agent.
 type Config struct {
-	MaxIterations int            `json:"max_iterations"`
-	Timeout       time.Duration  `json:"timeout"`
-	Temperature   float64        `json:"temperature"`
-	MaxTokens     int            `json:"max_tokens"`
-	Parser        ResponseParser `json:"-"` // Response parser for LLM output
-	PlanConfig    *PlanConfig    `json:"plan_config,omitempty"` // Planning feature configuration
-	Output        *OutputConfig  `json:"output,omitempty"`      // Structured output configuration
+	// MaxIterations is the maximum number of reasoning-acting cycles
+	MaxIterations int `json:"max_iterations"`
+	// Timeout is the maximum duration for agent execution
+	Timeout time.Duration `json:"timeout"`
+	// Temperature controls the randomness of LLM responses (0.0 to 1.0)
+	Temperature float64 `json:"temperature"`
+	// MaxTokens is the maximum number of tokens in LLM responses
+	MaxTokens int `json:"max_tokens"`
+	// Parser is the response parser for LLM output
+	Parser ResponseParser `json:"-"`
+	// PlanConfig contains planning feature configuration
+	PlanConfig *PlanConfig `json:"plan_config,omitempty"`
+	// Output contains structured output configuration
+	Output *OutputConfig `json:"output,omitempty"`
 }
 
+// DefaultConfig returns a Config with sensible default values.
+//
+// Defaults:
+//   - MaxIterations: 10
+//   - Timeout: 10 minutes
+//   - Temperature: 0.7
+//   - MaxTokens: 4096
+//   - Parser: JSONParser
+//   - EnableStructuredOutput: false
+//   - MaxNestingDepth: 5
+//   - MaxParseRetries: 3
 func DefaultConfig() *Config {
 	return &Config{
 		MaxIterations: 10,
