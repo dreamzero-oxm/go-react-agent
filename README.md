@@ -301,8 +301,268 @@ The parser automatically handles markdown code blocks (` ```json ... ` ` `) and 
 - **📊 Callback System** - Monitor agent execution step-by-step with callbacks
 - **🏪 Factory Pattern** - Unified LLM creation via factory interface
 - **🌍 Local & Cloud** - Support for both local models (Ollama) and cloud APIs
+- **🔌 MCP Integration** - Full Model Context Protocol support for connecting to external MCP servers
+- **🐛 Debug Mode** - Comprehensive debug logging for troubleshooting agent and MCP connections
 - **🎯 Planning Feature** - Intelligent task decomposition and adaptive re-planning
 - **📋 Structured Output** - User-defined struct output with automatic JSON schema generation
+
+## 🔌 MCP Integration
+
+The framework provides full Model Context Protocol (MCP) support, allowing you to connect your agent to external MCP servers and use their tools seamlessly.
+
+### What is MCP?
+
+Model Context Protocol (MCP) is an open protocol that enables AI models to securely interact with external systems. MCP servers expose tools that agents can call to perform actions like:
+- Web scraping and data retrieval
+- API integrations
+- Database operations
+- File system access
+- And much more
+
+### MCP Connection Process
+
+The framework handles the complete MCP lifecycle:
+
+1. **Configuration Loading** - Reads MCP server configurations from `~/.config/mcp/config.json`
+2. **Manager Initialization** - Creates an MCP Manager to oversee all server connections
+3. **Server Startup** - Starts each MCP server using its configured transport (stdio or SSE)
+4. **Handshake** - Performs JSON-RPC 2.0 handshake with each server
+5. **Tool Registration** - Retrieves available tools from each server and registers them with the agent
+6. **Agent Integration** - MCP tools become part of the agent's tool registry and are callable like any other tool
+
+### Configuration
+
+Create or edit `~/.config/mcp/config.json`:
+
+```json
+{
+  "mcpServers": {
+    "bright-data": {
+      "command": "npx",
+      "args": ["-y", "@brightdata/mcp-server"],
+      "env": {
+        "BRIGHTDATA_API_KEY": "your-api-key"
+      }
+    },
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/path/to/allowed/directory"]
+    },
+    "github": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "env": {
+        "GITHUB_TOKEN": "your-github-token"
+      }
+    }
+  }
+}
+```
+
+### Supported Transports
+
+#### Stdio Transport (Local Processes)
+Runs MCP servers as local subprocesses with stdin/stdout communication:
+```json
+{
+  "command": "npx",
+  "args": ["-y", "@brightdata/mcp-server"],
+  "env": {"API_KEY": "your-key"}
+}
+```
+
+#### SSE Transport (Remote Servers)
+Connects to remote MCP servers using Server-Sent Events:
+```json
+{
+  "url": "https://mcp-server.example.com/sse",
+  "headers": {
+    "Authorization": "Bearer token"
+  },
+  "timeout": 30,
+  "keepAlive": true
+}
+```
+
+### Using MCP with Agent
+
+Enable MCP integration in your agent configuration:
+
+```go
+package main
+
+import (
+    "github.com/dreamzero-oxm/go-react-agent/agent"
+    "github.com/dreamzero-oxm/go-react-agent/llm"
+)
+
+func main() {
+    // Create agent config with MCP enabled
+    config := agent.DefaultConfig()
+    config.MCPConfig.Enabled = true
+    config.MCPConfig.AutoLoadConfig = true
+    
+    // Create LLM (e.g., OpenAI)
+    openaiLLM, _ := llm.NewOpenAILLM(llm.OpenAIConfig{
+        APIKey:  "your-api-key",
+        Model:   "gpt-4",
+        Timeout: 30,
+    })
+    
+    // Create agent with MCP integration
+    a := agent.NewReActAgent(openaiLLM, config)
+    
+    // MCP tools are now available to the agent
+    response := a.Run(context.Background(), "Search the web for Go programming tutorials")
+    
+    fmt.Println(response.Answer)
+}
+```
+
+### MCP CLI Tool
+
+Use the `mcp-cmd` command-line tool to manage MCP servers:
+
+```bash
+# Start all configured MCP servers
+./mcp-cmd start
+
+# Stop all running MCP servers
+./mcp-cmd stop
+
+# Check MCP server status with debug logging
+./mcp-cmd status --debug
+
+# List available MCP tools
+./mcp-cmd list-tools
+
+# Call an MCP tool directly
+./mcp-cmd call bright-data_web_search --query "Go tutorials"
+```
+
+### Debug Mode for MCP
+
+Enable debug mode to see detailed MCP connection information:
+
+```go
+config := agent.DefaultConfig()
+config.MCPConfig.Enabled = true
+config.MCPConfig.AutoLoadConfig = true
+config.Debug = true  // Enable debug logging
+
+// Set logger level to Debug when debug mode is enabled
+if config.Debug {
+    logger.SetLevel(logger.LevelDebug)
+}
+```
+
+Or use the CLI flag:
+
+```bash
+./mcp-cmd status --debug
+```
+
+Debug mode logs:
+- MCP server startup and shutdown
+- JSON-RPC 2.0 handshake details
+- Tool registration from each server
+- Request/response payloads for MCP calls
+- Connection errors and reconnection attempts
+
+### Common Issues and Solutions
+
+#### 1. MCP Server Not Found
+**Problem**: `mcp-cmd status` shows "Server not found"
+
+**Solution**: Verify the MCP server is installed and accessible:
+```bash
+npx -y @brightdata/mcp-server --help
+```
+
+#### 2. Environment Variables Missing
+**Problem**: MCP server fails to start due to missing environment variables
+
+**Solution**: The framework automatically merges parent environment with config environment. Ensure:
+- Your environment variables are set in the shell
+- Config file includes required environment variables in the `env` section
+
+#### 3. Connection Timeout
+**Problem**: MCP server connection times out
+
+**Solution**: Increase timeout in SSE transport configuration:
+```json
+{
+  "url": "https://mcp-server.example.com/sse",
+  "timeout": 60
+}
+```
+
+#### 4. Tool Not Found
+**Problem**: Agent says "Tool not found" when calling MCP tool
+
+**Solution**: Verify tool registration:
+```bash
+./mcp-cmd list-tools --debug
+```
+
+### MCP Architecture
+
+```mermaid
+graph LR
+    A[Agent] --> B[Tool Registry]
+    B --> C[MCP Tools]
+    C --> D[MCP Manager]
+    D --> E[MCP Client 1]
+    D --> F[MCP Client 2]
+    D --> G[MCP Client N]
+    E --> H[Stdio Transport]
+    F --> I[SSE Transport]
+    G --> J[Stdio Transport]
+    H --> K[MCP Server 1]
+    I --> L[MCP Server 2]
+    J --> M[MCP Server N]
+```
+
+### Example: Using Bright Data MCP Server
+
+```go
+package main
+
+import (
+    "context"
+    "fmt"
+    "github.com/dreamzero-oxm/go-react-agent/agent"
+    "github.com/dreamzero-oxm/go-react-agent/llm"
+    "github.com/dreamzero-oxm/go-react-agent/logger"
+)
+
+func main() {
+    // Enable debug mode for MCP troubleshooting
+    config := agent.DefaultConfig()
+    config.MCPConfig.Enabled = true
+    config.MCPConfig.AutoLoadConfig = true
+    config.Debug = true
+    
+    if config.Debug {
+        logger.SetLevel(logger.LevelDebug)
+    }
+    
+    // Create LLM
+    openaiLLM, _ := llm.NewOpenAILLM(llm.OpenAIConfig{
+        APIKey:  os.Getenv("OPENAI_API_KEY"),
+        Model:   "gpt-4",
+        Timeout: 30,
+    })
+    
+    // Create agent with MCP integration
+    a := agent.NewReActAgent(openaiLLM, config)
+    
+    // Query using MCP web search tool
+    response := a.Run(context.Background(), "Search for the latest Go programming tutorials")
+    
+    fmt.Printf("Answer: %s\n", response.Answer)
+}
+```
 
 ## 🎯 Planning Feature
 
@@ -1236,6 +1496,39 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 📝 CHANGELOG
 
+### [Unreleased] - 2025-02-24
+
+#### Added
+- **MCP Integration**: Full Model Context Protocol support for connecting to external MCP servers
+  - MCP Manager for server lifecycle management
+  - MCP Client for JSON-RPC 2.0 communication
+  - Transport layer abstraction (Stdio for local processes, SSE for remote servers)
+  - MCP tool adapter to integrate MCP tools with agent tool registry
+  - Automatic config loading from `~/.config/mcp/config.json`
+  - MCP CLI tool (`mcp-cmd`) for server management: start, stop, status, list-tools, call
+  - Environment variable merging for subprocess MCP servers
+- **Debug Mode**: Comprehensive debug logging for troubleshooting agent and MCP connections
+  - Debug flag in agent configuration (`Config.Debug`)
+  - Debug logging at Manager, Client, and Transport layers
+  - Debug logging for agent execution (system prompt, message history, tool calls)
+  - `--debug` flag support in mcp-cmd CLI tool
+  - Automatic logger level setting when debug mode is enabled
+  - JSON-RPC 2.0 request/response logging
+  - SSE event parsing and reconnection logging
+
+#### Fixed
+- Environment variable handling in stdio transport: Fixed to merge parent environment with config environment instead of replacing
+- JSON-RPC response ID type mismatch: Fixed float64 vs int64 comparison issue causing request timeouts
+- Message history bug: Added agent thoughts and actions to conversation history to prevent tool repetition
+- Tool execution context: Fixed missing agent response in message history causing LLM to lose track of execution
+
+#### Documentation
+- Added MCP Integration section to README with comprehensive usage guide
+- Added debug mode documentation with examples and troubleshooting tips
+- Added MCP architecture diagram and connection process explanation
+- Added MCP CLI tool documentation
+- Added common issues and solutions for MCP integration
+
 ### [Unreleased] - 2025-02-19
 
 #### Added
@@ -1282,6 +1575,14 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 🔗 Links
 
+- **Issues**: Open an issue on GitHub for bugs or feature requests
+- **Discussions**: Use GitHub Discussions for questions and ideas
+- **Documentation**: Check inline code documentation for detailed API info
+
+## 🔗 Links
+
+- [GitHub Repository](https://github.com/dreamzero-oxm/go-react-agent)
+- [API Documentation](https://pkg.go.dev/github.com/dreamzero-oxm/go-react-agent)
 - [GitHub Repository](https://github.com/dreamzero-oxm/go-react-agent)
 - [API Documentation](https://pkg.go.dev/github.com/dreamzero-oxm/go-react-agent)
 - [GitHub Repository](https://github.com/dreamzero-oxm/go-react-agent)
