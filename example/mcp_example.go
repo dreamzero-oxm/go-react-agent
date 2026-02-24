@@ -3,8 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
-
-	// "os"
+	"os"
 
 	"github.com/dreamzero-oxm/go-react-agent/agent"
 	"github.com/dreamzero-oxm/go-react-agent/llm"
@@ -18,18 +17,11 @@ func main() {
 	log.SetLevel(logger.LevelInfo)
 	log.AddConsoleLogger(true)
 
-	// llmConfig := &llm.LLMConfig{
-	// 	APIKey:      os.Getenv("OPENAI_API_KEY"),
-	// 	BaseURL:     "https://api.openai.com/v1/chat/completions",
-	// 	Model:       "gpt-3.5-turbo",
-	// 	Temperature: 0.7,
-	// 	MaxTokens:   2000,
-	// }
 	llmConfig := &llm.LLMConfig{
-		APIKey:      "YOUR-API-KEY",
-		BaseURL:     "https://open.bigmodel.cn/api/coding/paas/v4",
-		Model:       "glm-4.7",
-		Temperature: 1,
+		APIKey:      os.Getenv("OPENAI_API_KEY"),
+		BaseURL:     "https://api.openai.com/v1/chat/completions",
+		Model:       "gpt-3.5-turbo",
+		Temperature: 0.7,
 		MaxTokens:   2000,
 	}
 
