@@ -1575,6 +1575,14 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 🔗 Links
 
+- **Issues**: Open an issue on GitHub for bugs or feature requests
+- **Discussions**: Use GitHub Discussions for questions and ideas
+- **Documentation**: Check inline code documentation for detailed API info
+
+## 🔗 Links
+
+- [GitHub Repository](https://github.com/dreamzero-oxm/go-react-agent)
+- [API Documentation](https://pkg.go.dev/github.com/dreamzero-oxm/go-react-agent)
 - [GitHub Repository](https://github.com/dreamzero-oxm/go-react-agent)
 - [API Documentation](https://pkg.go.dev/github.com/dreamzero-oxm/go-react-agent)
 - [GitHub Repository](https://github.com/dreamzero-oxm/go-react-agent)
