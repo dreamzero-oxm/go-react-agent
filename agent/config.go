@@ -40,6 +40,20 @@ type Config struct {
 	PlanConfig *PlanConfig `json:"plan_config,omitempty"`
 	// Output contains structured output configuration
 	Output *OutputConfig `json:"output,omitempty"`
+	// MCPConfig contains MCP integration configuration
+	MCPConfig *MCPConfig `json:"mcp_config,omitempty"`
+	// Debug enables verbose logging of each step (thought, action, observation)
+	Debug bool `json:"debug,omitempty"`
+}
+
+// MCPConfig contains MCP (Model Context Protocol) integration configuration.
+type MCPConfig struct {
+	// Enabled enables MCP integration
+	Enabled bool `json:"enabled"`
+	// AutoLoadConfig automatically loads MCP config from files
+	AutoLoadConfig bool `json:"auto_load_config"`
+	// ConfigPath is the path to MCP config file (optional, uses default if not specified)
+	ConfigPath string `json:"config_path,omitempty"`
 }
 
 // DefaultConfig returns a Config with sensible default values.
@@ -53,6 +67,7 @@ type Config struct {
 //   - EnableStructuredOutput: false
 //   - MaxNestingDepth: 5
 //   - MaxParseRetries: 3
+//   - MCPEnabled: false
 func DefaultConfig() *Config {
 	return &Config{
 		MaxIterations: 10,
@@ -64,6 +79,10 @@ func DefaultConfig() *Config {
 			EnableStructuredOutput: false,
 			MaxNestingDepth:        5,
 			MaxParseRetries:        3,
+		},
+		MCPConfig: &MCPConfig{
+			Enabled:        false,
+			AutoLoadConfig: true,
 		},
 	}
 }

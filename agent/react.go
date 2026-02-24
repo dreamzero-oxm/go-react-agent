@@ -12,6 +12,13 @@ import (
 	"github.com/dreamzero-oxm/go-react-agent/tools"
 )
 
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
 // ToolRegistry defines the interface for managing and executing tools.
 //
 // Implementations can provide custom tool storage and execution strategies.
@@ -35,12 +42,12 @@ type ToolRegistry interface {
 // It maintains a registry of tools and iteratively reasons, acts, and observes
 // until it can provide a final answer to the user's query.
 type ReActAgent struct {
-	llm          llm.LLM         // LLM for generating responses
-	tools        ToolRegistry    // Registry of available tools
-	config       *Config         // Agent configuration
-	logger       logger.Logger   // Logger for agent operations
-	systemPrompt string          // Custom system prompt (optional)
-	parser       ResponseParser  // Parser for LLM responses
+	llm          llm.LLM        // LLM for generating responses
+	tools        ToolRegistry   // Registry of available tools
+	config       *Config        // Agent configuration
+	logger       logger.Logger  // Logger for agent operations
+	systemPrompt string         // Custom system prompt (optional)
+	parser       ResponseParser // Parser for LLM responses
 }
 
 // NewReActAgent creates a new ReActAgent instance with the provided LLM, configuration, and logger.
@@ -187,7 +194,10 @@ func (a *ReActAgent) GetSystemPrompt() string {
 		basePrompt = a.injectOutputFormat(basePrompt)
 	}
 
-	return a.injectToolsIntoPrompt(basePrompt)
+	basePrompt = a.injectToolsIntoPrompt(basePrompt)
+	basePrompt = a.injectMCPContext(basePrompt)
+
+	return basePrompt
 }
 
 // getBaseSystemPrompt returns the base system prompt, using custom or default.
@@ -342,6 +352,58 @@ func (a *ReActAgent) injectToolsIntoPrompt(prompt string) string {
 	return fmt.Sprintf("%s\n\n## Available Tools\n\n%s", prompt, toolsSchema)
 }
 
+// injectMCPContext injects MCP resources and prompts information into the prompt.
+func (a *ReActAgent) injectMCPContext(prompt string) string {
+	if !a.IsMCPEnabled() {
+		return prompt
+	}
+
+	mcpContext, err := a.GetMCPContext()
+	if err != nil {
+		a.logger.Warn("Failed to get MCP context", map[string]interface{}{
+			"error": err.Error(),
+		})
+		return prompt
+	}
+
+	var builder strings.Builder
+
+	if len(mcpContext.Resources) > 0 {
+		builder.WriteString("\n\n## Available MCP Resources\n\n")
+		builder.WriteString("You can access the following resources for additional context:\n\n")
+		for _, resource := range mcpContext.Resources {
+			fmt.Fprintf(&builder, "- %s (%s): %s\n", resource.Name, resource.URI, resource.Description)
+			if resource.MimeType != "" {
+				fmt.Fprintf(&builder, "  MIME Type: %s\n", resource.MimeType)
+			}
+		}
+	}
+
+	if len(mcpContext.Prompts) > 0 {
+		builder.WriteString("\n\n## Available MCP Prompts\n\n")
+		builder.WriteString("You can use the following prompt templates for structured interactions:\n\n")
+		for _, promptInfo := range mcpContext.Prompts {
+			fmt.Fprintf(&builder, "- %s: %s\n", promptInfo.Name, promptInfo.Description)
+			if len(promptInfo.Arguments) > 0 {
+				builder.WriteString("  Arguments: ")
+				for i, arg := range promptInfo.Arguments {
+					if i > 0 {
+						builder.WriteString(", ")
+					}
+					builder.WriteString(arg)
+				}
+				builder.WriteString("\n")
+			}
+		}
+	}
+
+	if builder.Len() > 0 {
+		return prompt + builder.String()
+	}
+
+	return prompt
+}
+
 // injectOutputFormat injects structured output instructions into the prompt.
 func (a *ReActAgent) injectOutputFormat(prompt string) string {
 	if a.config.Output == nil || a.config.Output.OutputSchema == "" {
@@ -483,6 +545,12 @@ func (a *ReActAgent) RunWithCallback(ctx context.Context, query string, callback
 		},
 	}
 
+	if a.config.Debug {
+		a.logger.Debug("[DEBUG] Initial user query", map[string]interface{}{
+			"query": query,
+		})
+	}
+
 	steps := make([]Step, 0)
 	thoughts := make([]Thought, 0)
 
@@ -515,7 +583,29 @@ func (a *ReActAgent) RunWithCallback(ctx context.Context, query string, callback
 			"iteration": iteration + 1,
 		})
 
-		response, err := a.llm.GenerateWithSystem(a.GetSystemPrompt(), messages)
+		systemPrompt := a.GetSystemPrompt()
+		if a.config.Debug {
+			a.logger.Debug("[DEBUG] System Prompt", map[string]interface{}{
+				"prompt_length":  len(systemPrompt),
+				"prompt_preview": systemPrompt[:min(500, len(systemPrompt))] + "...",
+			})
+		}
+
+		if a.config.Debug && len(messages) > 0 {
+			a.logger.Debug("[DEBUG] Message History Before LLM Call", map[string]interface{}{
+				"message_count": len(messages),
+			})
+			for i, msg := range messages {
+				a.logger.Debug("[DEBUG] Message", map[string]interface{}{
+					"index":           i,
+					"role":            string(msg.Role),
+					"length":          len(msg.Content),
+					"content_preview": msg.Content[:min(200, len(msg.Content))] + "...",
+				})
+			}
+		}
+
+		response, err := a.llm.GenerateWithSystem(systemPrompt, messages)
 		if err != nil {
 			a.logger.Error("LLM generation failed", map[string]interface{}{
 				"error": err.Error(),
@@ -535,8 +625,31 @@ func (a *ReActAgent) RunWithCallback(ctx context.Context, query string, callback
 			return nil, fmt.Errorf("failed to parse LLM response: %w", err)
 		}
 
-		thoughts = append(thoughts, parsed.Thoughts...)
+		if a.config.Debug {
+			a.logger.Debug("[DEBUG] LLM Response", map[string]interface{}{
+				"raw_response": response,
+				"parsed":       parsed,
+			})
+			for i, thought := range parsed.Thoughts {
+				a.logger.Debug("[DEBUG] Thought", map[string]interface{}{
+					"index":   i + 1,
+					"content": thought.Content,
+				})
+			}
+			if parsed.Action != nil {
+				a.logger.Debug("[DEBUG] Action", map[string]interface{}{
+					"tool":  parsed.Action.Name,
+					"input": parsed.Action.Input,
+				})
+			}
+			if parsed.Answer != "" {
+				a.logger.Debug("[DEBUG] Answer", map[string]interface{}{
+					"answer": parsed.Answer,
+				})
+			}
+		}
 
+		thoughts = append(thoughts, parsed.Thoughts...)
 		if parsed.Done {
 			a.logger.Info("Agent completed successfully", map[string]interface{}{
 				"iterations": iteration + 1,
@@ -560,6 +673,18 @@ func (a *ReActAgent) RunWithCallback(ctx context.Context, query string, callback
 				"input": parsed.Action.Input,
 			})
 
+			if a.config.Debug {
+				inputJSON, _ := json.MarshalIndent(parsed.Action.Input, "", "  ")
+				a.logger.Debug("[DEBUG] Executing tool", map[string]interface{}{
+					"tool":  parsed.Action.Name,
+					"input": parsed.Action.Input,
+				})
+				a.logger.Debug("[DEBUG] Tool input (JSON)", map[string]interface{}{
+					"tool":  parsed.Action.Name,
+					"input": string(inputJSON),
+				})
+			}
+
 			result, err := a.tools.Execute(parsed.Action.Name, parsed.Action.Input)
 			if err != nil {
 				step.Error = err.Error()
@@ -567,19 +692,51 @@ func (a *ReActAgent) RunWithCallback(ctx context.Context, query string, callback
 					"tool":  parsed.Action.Name,
 					"error": err.Error(),
 				})
+				if a.config.Debug {
+					a.logger.Debug("[DEBUG] Tool execution failed", map[string]interface{}{
+						"tool":  parsed.Action.Name,
+						"error": err.Error(),
+					})
+				}
 			} else {
 				step.Observation = &Observation{Content: result}
 				a.logger.Debug("Tool execution succeeded", map[string]interface{}{
 					"tool":   parsed.Action.Name,
 					"result": result,
 				})
+				if a.config.Debug {
+					a.logger.Debug("[DEBUG] Tool execution succeeded", map[string]interface{}{
+						"tool":       parsed.Action.Name,
+						"result":     result,
+						"result_len": len(result),
+					})
+				}
 			}
 
 			steps = append(steps, *step)
 
+			if a.config.Debug {
+				a.logger.Debug("[DEBUG] Adding agent action to message history", map[string]interface{}{
+					"thoughts_count": len(parsed.Thoughts),
+					"action":         fmt.Sprintf("%s(%v)", parsed.Action.Name, parsed.Action.Input),
+				})
+			}
+
+			messages = append(messages, llm.Message{
+				Role:    llm.RoleAssistant,
+				Content: response,
+			})
+
 			observationMsg := fmt.Sprintf("Observation: %s", result)
 			if err != nil {
 				observationMsg = fmt.Sprintf("Observation: Error - %s", err.Error())
+			}
+
+			if a.config.Debug {
+				a.logger.Debug("[DEBUG] Adding observation to messages", map[string]interface{}{
+					"observation":   observationMsg,
+					"message_count": len(messages) + 1,
+				})
 			}
 
 			messages = append(messages, llm.Message{
