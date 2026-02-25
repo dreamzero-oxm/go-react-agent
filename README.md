@@ -229,66 +229,11 @@ The agent uses structured JSON responses for reliable parsing. LLMs respond with
 ```
 
 The parser automatically handles markdown code blocks (` ```json ... ` ` `) and validates responses for correctness.
-
-### 📋 JSON Response Format
-
-The agent uses structured JSON responses for reliable parsing. LLMs respond with this format:
-
-**For tool actions:**
-```json
-{
-  "thoughts": [{"content": "I need to use a tool"}],
-  "action": {"name": "tool_name", "input": {"param": "value"}},
-  "answer": null,
-  "done": false
-}
-```
-
-**For final answers:**
-```json
-{
-  "thoughts": [{"content": "I have enough information"}],
-  "action": null,
-  "answer": "Final answer here",
-  "done": true
-}
-```
-
-The parser automatically handles markdown code blocks (` ```json ... ` ` `) and validates responses for correctness.
-
-### 📋 JSON Response Format
-
-The agent uses structured JSON responses for reliable parsing. LLMs respond with this format:
-
-**For tool actions:**
-```json
-{
-  "thoughts": [{"content": "I need to use a tool"}],
-  "action": {"name": "tool_name", "input": {"param": "value"}},
-  "answer": null,
-  "done": false
-}
-```
-
-**For final answers:**
-```json
-{
-  "thoughts": [{"content": "I have enough information"}],
-  "action": null,
-  "answer": "Final answer here",
-  "done": true
-}
-```
-
-The parser automatically handles markdown code blocks (` ```json ... ` ` `) and validates responses for correctness.
-
 ## ✨ Features
 
 - **🧠 Complete ReAct Architecture** - Full implementation of the Thought-Action-Observation loop
 - **📋 JSON-Based Parsing** - Structured JSON responses with automatic validation and markdown handling
-- **📋 JSON-Based Parsing** - Structured JSON responses with automatic validation and markdown handling
 - **🔌 Multi-LLM Support** - Support for 10+ LLM providers including OpenAI, Anthropic, Google Gemini, Cohere, Mistral AI, AWS Bedrock, 阿里云通义千问, 百度文心一言, Ollama, and custom providers
-- **🔧 Pluggable Parsers** - Custom response parsers via `ResponseParser` interface for specialized formats
 - **🔧 Pluggable Parsers** - Custom response parsers via `ResponseParser` interface for specialized formats
 - **🌐 Comprehensive Coverage** - Global LLM support including Chinese and international providers
 - **🛠️ Tool System** - Extensible tool registration with built-in tools and easy custom tool creation
@@ -302,6 +247,7 @@ The parser automatically handles markdown code blocks (` ```json ... ` ` `) and 
 - **🏪 Factory Pattern** - Unified LLM creation via factory interface
 - **🌍 Local & Cloud** - Support for both local models (Ollama) and cloud APIs
 - **🔌 MCP Integration** - Full Model Context Protocol support for connecting to external MCP servers
+- **🎨 Claude Code Skills** - Official Claude Code Skills support using SKILL.md files for domain knowledge and guidance
 - **🐛 Debug Mode** - Comprehensive debug logging for troubleshooting agent and MCP connections
 - **🎯 Planning Feature** - Intelligent task decomposition and adaptive re-planning
 - **📋 Structured Output** - User-defined struct output with automatic JSON schema generation
@@ -323,7 +269,7 @@ Model Context Protocol (MCP) is an open protocol that enables AI models to secur
 
 The framework handles the complete MCP lifecycle:
 
-1. **Configuration Loading** - Reads MCP server configurations from `~/.config/mcp/config.json`
+1. **Configuration Loading** - Reads MCP server configurations from global and project files
 2. **Manager Initialization** - Creates an MCP Manager to oversee all server connections
 3. **Server Startup** - Starts each MCP server using its configured transport (stdio or SSE)
 4. **Handshake** - Performs JSON-RPC 2.0 handshake with each server
@@ -332,7 +278,7 @@ The framework handles the complete MCP lifecycle:
 
 ### Configuration
 
-Create or edit `~/.config/mcp/config.json`:
+Create or edit `~/.go-react-agent/mcp/mcp.json`:
 
 ```json
 {
@@ -401,6 +347,8 @@ func main() {
     config := agent.DefaultConfig()
     config.MCPConfig.Enabled = true
     config.MCPConfig.AutoLoadConfig = true
+    config.MCPConfig.GlobalConfigPath = "~/.go-react-agent/mcp/mcp.json"
+    config.MCPConfig.ProjectConfigPath = ".go-react-agent/mcp/mcp.json"
     
     // Create LLM (e.g., OpenAI)
     openaiLLM, _ := llm.NewOpenAILLM(llm.OpenAIConfig{
@@ -418,6 +366,15 @@ func main() {
     fmt.Println(response.Answer)
 }
 ```
+
+#### Configuration Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `Enabled` | bool | false | Enable MCP integration |
+| `AutoLoadConfig` | bool | true | Automatically load MCP config from files |
+| `GlobalConfigPath` | string | `~/.go-react-agent/mcp/mcp.json` | Path to global MCP config file |
+| `ProjectConfigPath` | string | `.go-react-agent/mcp/mcp.json` | Path to project MCP config file |
 
 ### MCP CLI Tool
 
@@ -563,6 +520,192 @@ func main() {
     fmt.Printf("Answer: %s\n", response.Answer)
 }
 ```
+
+## 🎨 Claude Code Skills Support
+
+go-react-agent supports the official Claude Code Skills format, allowing you to provide domain knowledge and guidance to the Agent through SKILL.md files.
+
+### What are Claude Code Skills?
+
+Claude Code Skills is a standard format for providing context and guidance to Claude through Markdown files. Each Skill contains:
+- **YAML Metadata**: Name, version, description, tags
+- **Markdown Content**: Detailed guidance, examples, best practices
+
+Unlike executable tools, Skills provide **knowledge and guidance** that the Agent can reference to provide more accurate answers.
+
+### Skill Loading Locations
+
+Skills are automatically loaded from the following locations (project-level overrides global):
+
+- **Global**: `~/.go-react-agent/skills/`
+- **Project**: `.go-react-agent/skills/`
+
+### Quick Start
+
+#### 1. Create a Skill File
+
+Create `~/.go-react-agent/skills/go-expert/SKILL.md`:
+
+```yaml
+---
+name: go-expert
+version: 1.0
+description: |
+  Provides expert knowledge about Go programming language including
+  best practices, idioms, concurrency patterns, and common pitfalls.
+tags:
+  - go
+  - golang
+  - programming
+---
+
+# Go Expert Skill
+
+This skill provides expert knowledge about Go programming.
+
+## Concurrency Patterns
+
+### Goroutines
+```go
+go func() {
+    // Do work concurrently
+}()
+```
+
+### Common Pitfalls
+
+1. Not checking errors
+2. Goroutine leaks
+3. Channel misuse
+```
+
+#### 2. Enable Skills in Agent
+
+```go
+config := agent.DefaultConfig()
+config.SkillConfig.Enabled = true
+
+skillAgent, err := agent.NewAgentWithSkills(llm, config, log)
+if err != nil {
+    panic(err)
+}
+
+// Skills content is automatically injected into Agent's context
+response, err := skillAgent.Run(ctx, "How do I properly handle errors in Go?")
+```
+
+### Features
+
+- **Auto Selection** - Automatically selects relevant Skills based on query content
+- **Context Injection** - Skills content is automatically injected into system prompts
+- **Knowledge Sharing** - Multiple Skills can provide relevant guidance simultaneously
+- **Flexible Configuration** - Configurable maximum number of skills to inject per query
+
+### 🏗️ Skills Architecture
+
+#### Skills Loading Flow Diagram
+
+```mermaid
+flowchart TD
+    A[Agent Initialization] --> B{SkillConfig.Enabled?}
+    B -->|No| C[Skip Skills Loading]
+    B -->|Yes| D[skills.LoadSkills]
+    
+    D --> E[Check Global Dir<br/>~/.go-react-agent/skills/]
+    E --> F{Global Exists?}
+    F -->|Yes| G[loadSkillsFromDir]
+    F -->|No| H[Skip Global]
+    
+    G --> I[Load All Skills<br/>from Directories]
+    I --> J[Parse SKILL.md Files]
+    J --> K[Extract YAML Metadata]
+    K --> L[Create Skill Objects]
+    L --> M[Add to Skills Map]
+    
+    H --> N[Check Project Dir<br/>.go-react-agent/skills/]
+    N --> O{Project Exists?}
+    O -->|Yes| P[loadSkillsFromDir]
+    O -->|No| Q[Skip Project]
+    
+    P --> I
+    M --> N
+    Q --> R[Return Skills Map]
+    R --> S[Agent.skills = Loaded Map]
+    
+    S --> T[Log Loaded Skills]
+    T --> U[Agent Ready]
+    
+    style B fill:#e1f5ff
+    style D fill:#fff9c4
+    style I fill:#c8e6c9
+    style R fill:#ffccbc
+    style U fill:#a5d6a7
+```
+
+#### Skills Integration Sequence Diagram
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Agent as ReActAgent
+    participant Loader as skills.LoadSkills
+    participant LLM
+    participant Prompt as Prompt Builder
+    
+    User->>Agent: NewAgentWithSkills(config)
+    Agent->>Agent: Check SkillConfig.Enabled
+    
+    alt Skills Enabled
+        Agent->>Loader: LoadSkills(globalDir, projectDir)
+        
+        Note over Loader: Load Global Skills
+        Loader->>Loader: expandPath(globalDir)
+        Loader->>Loader: loadSkillsFromDir(expandedDir)
+        Loader->>Loader: Parse SKILL.md files
+        Loader->>Loader: Extract metadata & content
+        
+        Note over Loader: Load Project Skills (Override Global)
+        Loader->>Loader: loadSkillsFromDir(projectDir)
+        Loader->>Loader: Parse SKILL.md files
+        Loader->>Loader: Extract metadata & content
+        
+        Loader-->>Agent: map[string]*Skill
+        
+        Agent->>Agent: a.skills = loadedSkills
+        Agent->>Agent: Log skill names & tags
+    end
+    
+    User->>Agent: Run(ctx, query)
+    
+    Agent->>Prompt: Build System Prompt
+    Prompt->>Prompt: injectSkillsContext(prompt)
+    
+    alt Skills Available
+        Prompt->>Prompt: Iterate through skills map
+        loop Each Skill
+            Prompt->>Prompt: Append skill metadata<br/>Name, Version, Description, Tags
+        end
+        Prompt->>Prompt: Add "use_skill" action instruction
+    end
+    
+    Prompt-->>Agent: Enhanced Prompt
+    Agent->>LLM: Generate response with skill context
+    LLM-->>Agent: Response
+    
+    alt Agent requests skill usage
+        Agent->>Agent: handleSkillUsage(skillName, query)
+        Agent->>Agent: a.skills[skillName]
+        Agent->>LLM: Generate with full skill content
+        LLM-->>Agent: Expert response
+    end
+    
+    Agent-->>User: Final Response
+    
+    style Loader fill:#fff9c4
+    style Prompt fill:#c8e6c9
+```
+
+For complete documentation, refer to [docs/claude-skills.md](docs/claude-skills.md)
 
 ## 🎯 Planning Feature
 
@@ -902,7 +1045,6 @@ See [example/example_structured.go](example/example_structured.go) and [examples
 
 ```bash
 go get github.com/dreamzero-oxm/go-react-agent
-go get github.com/dreamzero-oxm/go-react-agent
 ```
 
 ## 🚀 Quick Start
@@ -1202,33 +1344,6 @@ This is useful when:
 - Using LLMs that don't support JSON output well
 - Working with specialized response formats
 - Implementing custom validation or preprocessing
-
-#### Custom Response Parsers
-
-Implement the `ResponseParser` interface for custom response formats:
-
-```go
-// Define a custom parser
-type XMLParser struct{}
-
-func (x *XMLParser) Parse(response string) (*agent.ReActResponse, error) {
-    // Your custom parsing logic
-    // For example: parse XML format instead of JSON
-    // ...
-    return &agent.ReActResponse{}, nil
-}
-
-// Use the custom parser
-config := agent.DefaultConfig()
-config.Parser = &XMLParser{}
-reactAgent := agent.NewReActAgent(llm, config, log)
-```
-
-This is useful when:
-- Using LLMs that don't support JSON output well
-- Working with specialized response formats
-- Implementing custom validation or preprocessing
-
 ### Built-in Tools
 
 The framework includes these ready-to-use tools:
@@ -1504,7 +1619,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
   - MCP Client for JSON-RPC 2.0 communication
   - Transport layer abstraction (Stdio for local processes, SSE for remote servers)
   - MCP tool adapter to integrate MCP tools with agent tool registry
-  - Automatic config loading from `~/.config/mcp/config.json`
+  - Automatic config loading from `~/.go-react-agent/mcp.json`
   - MCP CLI tool (`mcp-cmd`) for server management: start, stop, status, list-tools, call
   - Environment variable merging for subprocess MCP servers
 - **Debug Mode**: Comprehensive debug logging for troubleshooting agent and MCP connections

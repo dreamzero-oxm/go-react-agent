@@ -42,6 +42,8 @@ type Config struct {
 	Output *OutputConfig `json:"output,omitempty"`
 	// MCPConfig contains MCP integration configuration
 	MCPConfig *MCPConfig `json:"mcp_config,omitempty"`
+	// SkillConfig contains skill integration configuration
+	SkillConfig *SkillConfig `json:"skill_config,omitempty"`
 	// Debug enables verbose logging of each step (thought, action, observation)
 	Debug bool `json:"debug,omitempty"`
 }
@@ -52,8 +54,24 @@ type MCPConfig struct {
 	Enabled bool `json:"enabled"`
 	// AutoLoadConfig automatically loads MCP config from files
 	AutoLoadConfig bool `json:"auto_load_config"`
-	// ConfigPath is the path to MCP config file (optional, uses default if not specified)
-	ConfigPath string `json:"config_path,omitempty"`
+	// GlobalConfigPath is the path to global MCP config file (default: ~/.go-react-agent/mcp.json)
+	GlobalConfigPath string `json:"global_config_path,omitempty"`
+	// ProjectConfigPath is the path to project MCP config file (default: .go-react-agent/mcp.json)
+	ProjectConfigPath string `json:"project_config_path,omitempty"`
+}
+
+// SkillConfig contains Claude Code Skills integration configuration.
+type SkillConfig struct {
+	// Enabled enables skill integration
+	Enabled bool `json:"enabled"`
+	// AutoLoadSkills automatically loads skills from directories
+	AutoLoadSkills bool `json:"auto_load_skills"`
+	// MaxSkillsPerQuery is the maximum number of skills to inject per query
+	MaxSkillsPerQuery int `json:"max_skills_per_query"`
+	// GlobalSkillsDir is the global skills directory (default: ~/.claude/skills/)
+	GlobalSkillsDir string `json:"global_skills_dir"`
+	// ProjectSkillsDir is the project skills directory (default: .claude/skills/)
+	ProjectSkillsDir string `json:"project_skills_dir"`
 }
 
 // DefaultConfig returns a Config with sensible default values.
@@ -81,8 +99,17 @@ func DefaultConfig() *Config {
 			MaxParseRetries:        3,
 		},
 		MCPConfig: &MCPConfig{
-			Enabled:        false,
-			AutoLoadConfig: true,
+			Enabled:           false,
+			AutoLoadConfig:    true,
+			GlobalConfigPath:  "~/.go-react-agent/mcp/mcp.json",
+			ProjectConfigPath: ".go-react-agent/mcp/mcp.json",
+		},
+		SkillConfig: &SkillConfig{
+			Enabled:           false,
+			AutoLoadSkills:    true,
+			MaxSkillsPerQuery: 3,
+			GlobalSkillsDir:   "~/.go-react-agent/skills/",
+			ProjectSkillsDir:  ".go-react-agent/skills/",
 		},
 	}
 }

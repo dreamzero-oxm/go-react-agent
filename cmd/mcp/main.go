@@ -103,7 +103,7 @@ func handleAdd() error {
 		return fmt.Errorf("server name is required")
 	}
 
-	config, err := mcp.LoadConfig()
+	config, err := mcp.LoadConfig("~/.go-react-agent/mcp/mcp.json", ".go-react-agent/mcp/mcp.json")
 	if err != nil {
 		config = mcp.NewDefaultConfig()
 	}
@@ -136,7 +136,7 @@ func handleAdd() error {
 // Returns:
 //   - error: An error if listing servers fails.
 func handleList() error {
-	config, err := mcp.LoadConfig()
+	config, err := mcp.LoadConfig("~/.go-react-agent/mcp.json", ".go-react-agent/mcp.json")
 	if err != nil {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
@@ -184,7 +184,7 @@ func handleEnable() error {
 		return fmt.Errorf("server name is required")
 	}
 
-	config, err := mcp.LoadConfig()
+	config, err := mcp.LoadConfig("~/.go-react-agent/mcp.json", ".go-react-agent/mcp.json")
 	if err != nil {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
@@ -214,7 +214,7 @@ func handleDisable() error {
 		return fmt.Errorf("server name is required")
 	}
 
-	config, err := mcp.LoadConfig()
+	config, err := mcp.LoadConfig("~/.go-react-agent/mcp.json", ".go-react-agent/mcp.json")
 	if err != nil {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
@@ -244,7 +244,7 @@ func handleRemove() error {
 		return fmt.Errorf("server name is required")
 	}
 
-	config, err := mcp.LoadConfig()
+	config, err := mcp.LoadConfig("~/.go-react-agent/mcp.json", ".go-react-agent/mcp.json")
 	if err != nil {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
@@ -270,7 +270,7 @@ func handleStatus() error {
 	debug := flagSet.Bool("debug", false, "Enable debug logging")
 	flagSet.Parse(os.Args[2:])
 
-	config, err := mcp.LoadConfig()
+	config, err := mcp.LoadConfig("~/.go-react-agent/mcp.json", ".go-react-agent/mcp.json")
 	if err != nil {
 		return fmt.Errorf("failed to load config: %w", err)
 	}

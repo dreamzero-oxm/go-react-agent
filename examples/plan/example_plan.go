@@ -12,27 +12,38 @@ import (
 )
 
 func main() {
-	// Setup logging
 	multiLog := logger.NewMultiLogger()
 	multiLog.SetLevel(logger.LevelInfo)
 	multiLog.AddConsoleLogger(true)
 
-	// Configure LLM
+	fileLog, err := multiLog.AddFileLogger("agent.log")
+	if err != nil {
+		fmt.Printf("Failed to add file logger: %v\n", err)
+	} else {
+		defer fileLog.Close()
+	}
+
+	apiKey := os.Getenv("OPENAI_API_KEY")
+	if apiKey == "" {
+		fmt.Println("Please set OPENAI_API_KEY environment variable")
+		os.Exit(1)
+	}
+
 	llmConfig := &llm.LLMConfig{
-		APIKey:      os.Getenv("OPENAI_API_KEY"),
-		BaseURL:     "https://api.openai.com/v1/chat/completions",
-		Model:       "gpt-5.2",
+		APIKey:      apiKey,
+		BaseURL:     "https://open.bigmodel.cn/api/coding/paas/v4",
+		Model:       "glm-4.7",
 		Temperature: 0.7,
 		MaxTokens:   2000,
 	}
 
 	openaiLLM, err := llm.NewOpenAILLM(llmConfig)
 	if err != nil {
-		panic(err)
+		fmt.Printf("Failed to create OpenAI LLM: %v\n", err)
+		os.Exit(1)
 	}
 	defer openaiLLM.Close()
 
-	// Create agent with planning enabled
 	planConfig := agent.DefaultPlanConfig()
 	planConfig.Enabled = true
 	planConfig.ReplanEnabled = true
@@ -43,12 +54,10 @@ func main() {
 	planningAgent := agent.NewReActAgentWithPlanning(openaiLLM, config, planConfig, multiLog)
 	planningAgent.InitializePlanning(openaiLLM)
 
-	// Register tools
 	tools.RegisterBuiltinToolsTo(planningAgent)
 
-	// Run with planning
 	ctx := context.Background()
-	query := "Check the current weather in Chaozhou, China, and create a travel itinerary that includes the seaside"
+	query := "Check current weather in Chaozhou, China, and create a travel itinerary that includes seaside"
 
 	fmt.Printf("Query: %s\n\n", query)
 

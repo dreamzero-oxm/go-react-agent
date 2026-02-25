@@ -28,7 +28,17 @@ func (a *ReActAgent) WithMCPIntegration() error {
 		return fmt.Errorf("MCP integration is not enabled in config")
 	}
 
-	config, err := mcp.LoadConfig()
+	globalPath := a.config.MCPConfig.GlobalConfigPath
+	if globalPath == "" {
+		globalPath = "~/.go-react-agent/mcp/mcp.json"
+	}
+
+	projectPath := a.config.MCPConfig.ProjectConfigPath
+	if projectPath == "" {
+		projectPath = ".go-react-agent/mcp/mcp.json"
+	}
+
+	config, err := mcp.LoadConfig(globalPath, projectPath)
 	if err != nil {
 		return fmt.Errorf("failed to load MCP config: %w", err)
 	}
@@ -177,7 +187,7 @@ func (a *ReActAgent) WithMCPManager(manager *mcp.Manager) error {
 //   - []mcp.ServerStatus: The status of all configured servers.
 //   - error: An error if loading config or starting manager fails.
 func GetMCPStatus() ([]mcp.ServerStatus, error) {
-	config, err := mcp.LoadConfig()
+	config, err := mcp.LoadConfig("~/.go-react-agent/mcp/mcp.json", ".go-react-agent/mcp/mcp.json")
 	if err != nil {
 		return nil, fmt.Errorf("failed to load MCP config: %w", err)
 	}
@@ -195,19 +205,21 @@ func GetMCPStatus() ([]mcp.ServerStatus, error) {
 // ConfigureMCP enables MCP integration with custom configuration.
 //
 // This function modifies the agent's configuration to enable MCP integration
-// and optionally sets a custom config path.
+// and optionally sets custom config paths.
 //
 // Parameters:
 //   - enabled: Whether to enable MCP.
-//   - configPath: Custom path to the MCP configuration file.
-func (a *ReActAgent) ConfigureMCP(enabled bool, configPath string) {
+//   - globalPath: Custom path to the global MCP configuration file.
+//   - projectPath: Custom path to the project MCP configuration file.
+func (a *ReActAgent) ConfigureMCP(enabled bool, globalPath string, projectPath string) {
 	if a.config.MCPConfig == nil {
 		a.config.MCPConfig = &MCPConfig{}
 	}
 
 	a.config.MCPConfig.Enabled = enabled
 	a.config.MCPConfig.AutoLoadConfig = enabled
-	a.config.MCPConfig.ConfigPath = configPath
+	a.config.MCPConfig.GlobalConfigPath = globalPath
+	a.config.MCPConfig.ProjectConfigPath = projectPath
 }
 
 // IsMCPEnabled returns whether MCP integration is enabled for this agent.
@@ -249,7 +261,17 @@ func (a *ReActAgent) GetMCPContext() (*MCPContext, error) {
 		return nil, fmt.Errorf("MCP integration is not enabled")
 	}
 
-	config, err := mcp.LoadConfig()
+	globalPath := a.config.MCPConfig.GlobalConfigPath
+	if globalPath == "" {
+		globalPath = "~/.go-react-agent/mcp/mcp.json"
+	}
+
+	projectPath := a.config.MCPConfig.ProjectConfigPath
+	if projectPath == "" {
+		projectPath = ".go-react-agent/mcp/mcp.json"
+	}
+
+	config, err := mcp.LoadConfig(globalPath, projectPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load MCP config: %w", err)
 	}

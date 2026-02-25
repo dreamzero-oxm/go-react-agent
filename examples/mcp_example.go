@@ -85,7 +85,7 @@ func main() {
 	manualConfig := agent.DefaultConfig()
 	manualAgent := agent.NewReActAgent(openaiLLM, manualConfig, log)
 
-	mcpCfg, err := mcp.LoadConfig()
+	mcpCfg, err := mcp.LoadConfig("~/.go-react-agent/mcp/mcp.json", ".go-react-agent/mcp/mcp.json")
 	if err != nil {
 		fmt.Printf("No MCP config found: %v\n", err)
 	} else {

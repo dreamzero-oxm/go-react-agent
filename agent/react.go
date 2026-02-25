@@ -9,6 +9,7 @@ import (
 
 	"github.com/dreamzero-oxm/go-react-agent/llm"
 	"github.com/dreamzero-oxm/go-react-agent/logger"
+	"github.com/dreamzero-oxm/go-react-agent/skills"
 	"github.com/dreamzero-oxm/go-react-agent/tools"
 )
 
@@ -42,12 +43,13 @@ type ToolRegistry interface {
 // It maintains a registry of tools and iteratively reasons, acts, and observes
 // until it can provide a final answer to the user's query.
 type ReActAgent struct {
-	llm          llm.LLM        // LLM for generating responses
-	tools        ToolRegistry   // Registry of available tools
-	config       *Config        // Agent configuration
-	logger       logger.Logger  // Logger for agent operations
-	systemPrompt string         // Custom system prompt (optional)
-	parser       ResponseParser // Parser for LLM responses
+	llm          llm.LLM                  // LLM for generating responses
+	tools        ToolRegistry             // Registry of available tools
+	config       *Config                  // Agent configuration
+	logger       logger.Logger            // Logger for agent operations
+	systemPrompt string                   // Custom system prompt (optional)
+	parser       ResponseParser           // Parser for LLM responses
+	skills       map[string]*skills.Skill // Loaded Claude Code Skills (name -> skill)
 }
 
 // NewReActAgent creates a new ReActAgent instance with the provided LLM, configuration, and logger.
@@ -196,6 +198,7 @@ func (a *ReActAgent) GetSystemPrompt() string {
 
 	basePrompt = a.injectToolsIntoPrompt(basePrompt)
 	basePrompt = a.injectMCPContext(basePrompt)
+	basePrompt = a.injectSkillsContext(basePrompt)
 
 	return basePrompt
 }
@@ -402,6 +405,116 @@ func (a *ReActAgent) injectMCPContext(prompt string) string {
 	}
 
 	return prompt
+}
+
+// injectSkillsContext injects Claude Code Skills information into the prompt.
+// Only metadata is included; full skill content is loaded on-demand when agent requests it.
+func (a *ReActAgent) injectSkillsContext(prompt string) string {
+	if !a.IsSkillEnabled() || len(a.skills) == 0 {
+		return prompt
+	}
+
+	var builder strings.Builder
+	builder.WriteString("\n\n## Available Skills\n\n")
+	builder.WriteString("When you need domain knowledge or guidance, you can request to use a specific skill.\n\n")
+	builder.WriteString("Available skills:\n\n")
+
+	for _, skill := range a.skills {
+		builder.WriteString(fmt.Sprintf("- **%s**", skill.Name))
+		if skill.Version != "" {
+			builder.WriteString(fmt.Sprintf(" (v%s)", skill.Version))
+		}
+		builder.WriteString("\n")
+		if skill.Description != "" {
+			builder.WriteString(fmt.Sprintf("  - Description: %s\n", skill.Description))
+		}
+		if len(skill.Tags) > 0 {
+			builder.WriteString(fmt.Sprintf("  - Tags: %s\n", strings.Join(skill.Tags, ", ")))
+		}
+	}
+
+	builder.WriteString("\nTo use a skill, respond with an action:\n")
+	builder.WriteString(`{"action": {"name": "use_skill", "input": {"skill_name": "skill-name"}}}`)
+
+	return prompt + builder.String()
+}
+
+// handleSkillUsage handles when the agent wants to use a skill.
+// It loads the full skill content and generates a response with that context.
+//
+// Parameters:
+//   - ctx: Context for the operation.
+//   - skillName: Name of the skill to use.
+//   - query: The original user query.
+//
+// Returns:
+//   - string: The LLM response with skill context.
+//   - error: An error if the skill is not found or LLM call fails.
+func (a *ReActAgent) handleSkillUsage(ctx context.Context, skillName string, query string) (string, error) {
+	targetSkill, ok := a.skills[skillName]
+	if !ok {
+		return "", fmt.Errorf("skill '%s' not found", skillName)
+	}
+
+	// Log skill usage
+	a.logger.Info("Agent using skill", map[string]interface{}{
+		"skill": skillName,
+	})
+
+	// Create skill-enhanced prompt
+	skillPrompt := fmt.Sprintf(`You are an expert assistant specialized in the following domain. Use the provided skill knowledge to answer the user's question accurately and comprehensively.
+
+---
+
+## Skill: %s
+
+%s
+
+---
+
+## User Query
+%s
+
+## Instructions for Answering
+
+1. **Understand the Skill Content**: Carefully review the skill documentation above. It contains specialized knowledge, best practices, and guidelines for this domain.
+
+2. **Provide a Comprehensive Answer**:
+   - Address all aspects of the user's query
+   - Use specific terminology and concepts from the skill content
+   - Include relevant examples when helpful
+   - Explain complex concepts clearly
+
+3. **Quality Standards**:
+   - Be accurate and precise - rely on the skill content as your primary source
+   - Be thorough - cover important details and considerations
+   - Be practical - provide actionable advice when applicable
+   - Be clear - use well-structured, easy-to-follow explanations
+
+4. **Handling Uncertainties**:
+   - If the skill content doesn't fully address the query, acknowledge this limitation
+   - Provide the best possible answer based on available information
+   - Suggest what additional information might be needed
+
+5. **Output Format**:
+   - Use markdown formatting for better readability
+   - Organize information with clear headings and bullet points
+   - Include code examples or configurations when relevant
+
+Now, please provide a comprehensive, expert-level answer to the user's query based on the skill knowledge above.
+`, targetSkill.Name, targetSkill.Content, query)
+
+	// Get LLM response with skill context
+	messages := []llm.Message{
+		{Role: llm.RoleUser, Content: skillPrompt},
+	}
+
+	response, err := a.llm.Generate(messages)
+	if err != nil {
+		return "", fmt.Errorf("failed to get LLM response with skill: %w", err)
+	}
+
+	return response, nil
 }
 
 // injectOutputFormat injects structured output instructions into the prompt.
@@ -662,6 +775,49 @@ func (a *ReActAgent) RunWithCallback(ctx context.Context, query string, callback
 		}
 
 		if parsed.Action != nil {
+			// Special handling for use_skill action
+			if parsed.Action.Name == "use_skill" {
+				skillName, _ := parsed.Action.Input["skill_name"].(string)
+				if skillName == "" {
+					skillName, _ = parsed.Action.Input["name"].(string)
+				}
+
+				latestThought := parsed.Thoughts[len(parsed.Thoughts)-1]
+				step := &Step{
+					Thought: &latestThought,
+					Action:  parsed.Action,
+				}
+
+				a.logger.Info("Using skill", map[string]interface{}{
+					"skill": skillName,
+				})
+
+				// Handle skill usage
+				skillResponse, err := a.handleSkillUsage(timeoutCtx, skillName, query)
+				if err != nil {
+					step.Error = err.Error()
+					step.Observation = &Observation{Content: fmt.Sprintf("Error: %v", err)}
+				} else {
+					step.Observation = &Observation{Content: skillResponse}
+				}
+
+				steps = append(steps, *step)
+				if callback != nil {
+					callback(step)
+				}
+
+				// Add skill response to message history
+				messages = append(messages, llm.Message{
+					Role: llm.RoleAssistant,
+					Content: fmt.Sprintf("{\"thoughts\": [{\"content\": %s}], \"action\": {\"name\": \"use_skill\", \"input\": {\"skill_name\": \"%s\"}}, \"observation\": %s}",
+						latestThought.Content, skillName, step.Observation.Content),
+				})
+
+				// After using skill, agent should provide final answer
+				continue
+			}
+
+			// Regular tool execution
 			latestThought := parsed.Thoughts[len(parsed.Thoughts)-1]
 			step := &Step{
 				Thought: &latestThought,

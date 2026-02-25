@@ -8,12 +8,6 @@ import (
 	"strings"
 )
 
-// Default configuration paths.
-const (
-	GlobalConfigPath  = ".go-react-agent/mcp.json"
-	ProjectConfigPath = ".go-react-agent/mcp.json"
-)
-
 // Config represents the MCP configuration structure.
 type Config struct {
 	MCPServers map[string]ServerConfig `json:"mcpServers"`
@@ -37,9 +31,27 @@ type ServerConfig struct {
 // Returns:
 //   - *Config: The loaded configuration.
 //   - error: An error if loading fails.
-func LoadConfig() (*Config, error) {
-	projectConfig, projectExists := findProjectConfig()
-	globalConfig, globalExists := findGlobalConfig()
+func LoadConfig(globalPath string, projectPath string) (*Config, error) {
+	var projectConfig, globalConfig string
+	var projectExists, globalExists bool
+
+	if projectPath != "" {
+		projectConfig = os.ExpandEnv(projectPath)
+		if _, err := os.Stat(projectConfig); err == nil {
+			projectExists = true
+		}
+	} else {
+		projectConfig, projectExists = findProjectConfig()
+	}
+
+	if globalPath != "" {
+		globalConfig = os.ExpandEnv(globalPath)
+		if _, err := os.Stat(globalConfig); err == nil {
+			globalExists = true
+		}
+	} else {
+		globalConfig, globalExists = findGlobalConfig()
+	}
 
 	config := &Config{
 		MCPServers: make(map[string]ServerConfig),
@@ -87,7 +99,7 @@ func findProjectConfig() (string, bool) {
 		return "", false
 	}
 
-	configPath := filepath.Join(wd, ProjectConfigPath)
+	configPath := filepath.Join(wd, ".go-react-agent/mcp/mcp.json")
 	if _, err := os.Stat(configPath); err == nil {
 		return configPath, true
 	}
@@ -106,7 +118,7 @@ func findGlobalConfig() (string, bool) {
 		return "", false
 	}
 
-	configPath := filepath.Join(homeDir, GlobalConfigPath)
+	configPath := filepath.Join(homeDir, ".go-react-agent/mcp/mcp.json")
 	if _, err := os.Stat(configPath); err == nil {
 		return configPath, true
 	}
@@ -128,12 +140,12 @@ func (c *Config) Save() error {
 			return fmt.Errorf("failed to get home directory: %w", err)
 		}
 
-		configDir := filepath.Join(homeDir, ".go-react-agent")
+		configDir := filepath.Join(homeDir, ".go-react-agent/mcp")
 		if err := os.MkdirAll(configDir, 0755); err != nil {
 			return fmt.Errorf("failed to create config directory: %w", err)
 		}
 
-		projectConfigPath = filepath.Join(homeDir, GlobalConfigPath)
+		projectConfigPath = filepath.Join(homeDir, ".go-react-agent/mcp/mcp.json")
 	}
 
 	data, err := json.MarshalIndent(c, "", "  ")

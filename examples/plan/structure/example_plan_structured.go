@@ -11,24 +11,19 @@ import (
 	"github.com/dreamzero-oxm/go-react-agent/tools"
 )
 
-// Activity 表示一个活动安排
 type Activity struct {
 	Time     string `json:"time" agent:"desc:活动时间;required:true"`
 	Location string `json:"location" agent:"desc:活动地点;required:true"`
 	Action   string `json:"action" agent:"desc:活动内容;required:true"`
 }
 
-// DailyPlan 表示一天的行程计划
-// 演示嵌套结构体和 slice 类型的使用
 type DailyPlan struct {
-	Date        string     `json:"date" agent:"desc:日期(YYYY-MM-DD);required:true"`
-	City        string     `json:"city" agent:"desc:所在城市;required:true"`
-	Weather     string     `json:"weather" agent:"desc:预计天气"`
-	Activities  []Activity `json:"activities" agent:"desc:当天的活动列表"`
+	Date       string     `json:"date" agent:"desc:日期(YYYY-MM-DD);required:true"`
+	City       string     `json:"city" agent:"desc:所在城市;required:true"`
+	Weather    string     `json:"weather" agent:"desc:预计天气"`
+	Activities []Activity `json:"activities" agent:"desc:当天的活动列表"`
 }
 
-// TravelPlan 表示完整的旅游计划
-// 演示嵌套结构体和多层嵌套的使用
 type TravelPlan struct {
 	Destination string      `json:"destination" agent:"desc:目的地;required:true"`
 	Duration    int         `json:"duration" agent:"desc:行程天数;required:true;range:1,30"`
@@ -39,27 +34,30 @@ type TravelPlan struct {
 }
 
 func main() {
-	// Setup logging
 	multiLog := logger.NewMultiLogger()
 	multiLog.SetLevel(logger.LevelInfo)
 	multiLog.AddConsoleLogger(true)
 
-	// Get API key from environment
+	fileLog, err := multiLog.AddFileLogger("agent.log")
+	if err != nil {
+		fmt.Printf("Failed to add file logger: %v\n", err)
+	} else {
+		defer fileLog.Close()
+	}
+
 	apiKey := os.Getenv("OPENAI_API_KEY")
 	if apiKey == "" {
 		fmt.Println("Please set OPENAI_API_KEY environment variable")
 		os.Exit(1)
 	}
 
-	// Configure LLM
 	llmConfig := &llm.LLMConfig{
 		APIKey:      apiKey,
-		BaseURL:     "https://api.openai.com/v1/chat/completions",
-		Model:       "gpt-4",
+		BaseURL:     "https://open.bigmodel.cn/api/coding/paas/v4",
+		Model:       "glm-4.7",
 		Temperature: 0.7,
 		MaxTokens:   3000,
 	}
-	// Configure LLM
 
 	openaiLLM, err := llm.NewOpenAILLM(llmConfig)
 	if err != nil {
@@ -67,7 +65,6 @@ func main() {
 	}
 	defer openaiLLM.Close()
 
-	// Create agent with planning enabled
 	planConfig := agent.DefaultPlanConfig()
 	planConfig.Enabled = true
 	planConfig.ReplanEnabled = true
@@ -78,10 +75,8 @@ func main() {
 	planningAgent := agent.NewReActAgentWithPlanning(openaiLLM, config, planConfig, multiLog)
 	planningAgent.InitializePlanning(openaiLLM)
 
-	// Register tools
 	tools.RegisterBuiltinToolsTo(planningAgent)
 
-	// Run with planning and structured output
 	ctx := context.Background()
 	query := "帮我规划一个从明天开始的3天2夜的潮州旅游行程，包括海边活动"
 
@@ -90,19 +85,16 @@ func main() {
 	fmt.Printf("╚══════════════════════════════════════════╝\n\n")
 	fmt.Printf("Query: %s\n\n", query)
 
-	// 使用泛型方法获取结构化输出
 	response, plan, err := agent.RunStructuredWithPlan[TravelPlan](planningAgent, ctx, query)
 	if err != nil {
 		panic(err)
 	}
 
-	// 打印执行计划
 	fmt.Printf("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
 	fmt.Printf("Execution Plan:\n")
 	fmt.Printf("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
 	printPlan(plan)
 
-	// 打印结构化输出
 	fmt.Printf("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
 	fmt.Printf("Structured Travel Plan:\n")
 	fmt.Printf("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
